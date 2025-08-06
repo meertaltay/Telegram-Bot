@@ -8,8 +8,14 @@ import threading
 import time
 from config import *
 
+# Komut modüllerini import et
+from commands.price_commands import register_price_commands
+
 # Bot'u başlat
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
+
+# Komutları kaydet
+register_price_commands(bot)
 
 # Global değişkenler
 bot_info = bot.get_me()
