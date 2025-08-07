@@ -1,6 +1,6 @@
 """
-Crypto Telegram Bot - Clean Main File
-Temizlenmiş ve sadeleştirilmiş ana bot dosyası
+Crypto Telegram Bot - Main File (FINAL VERSION + Liquidity Heatmap)
+Ana bot dosyası - gelişmiş analiz sistemi ve likidite haritası ile
 """
 
 import telebot
@@ -11,12 +11,15 @@ from config import *
 # Utils modüllerini import et
 from utils.binance_api import load_all_binance_symbols, find_binance_symbol
 from utils.technical_analysis import *
-from utils.chart_generator import create_advanced_chart
+from utils.chart_generator import create_advanced_chart, create_simple_price_chart
 
 # Komut modüllerini import et
 from commands.price_commands import register_price_commands
 from commands.alarm_commands import register_alarm_commands
 from commands.analysis_commands import register_analysis_commands
+
+# YENİ: Likidite haritası modülü
+from utils.liquidity_heatmap import add_liquidity_command_to_bot
 
 # Bot'u başlat
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
@@ -25,6 +28,9 @@ bot = telebot.TeleBot(TELEGRAM_TOKEN)
 register_price_commands(bot)
 register_alarm_commands(bot)
 register_analysis_commands(bot)
+
+# YENİ: Likidite komutlarını kaydet
+add_liquidity_command_to_bot(bot)
 
 # Global değişkenler
 bot_info = bot.get_me()
@@ -59,7 +65,7 @@ def should_respond_in_group(message):
     return False
 
 # =============================================================================
-# TEMEL KOMUTLAR - TEMİZLENMİŞ
+# TEMEL KOMUTLAR
 # =============================================================================
 
 @bot.message_handler(commands=['start'])
@@ -67,27 +73,15 @@ def start(message):
     if not should_respond_in_group(message):
         return
         
-    # Basitleştirilmiş klavye menüsü
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row("/analiz", "/fiyat")
-    markup.row("/alarm", "/top10")
-    markup.row("/yardim", "/ping")
+    markup.row("/fiyat", "/top10")
+    markup.row("/analiz", "/trending") 
+    markup.row("/breakout", "/signals")
+    markup.row("/liquidity", "/korku")
+    markup.row("/predict", "/alarm")
+    markup.row("/yardim")
     
-    start_message = """🚀 **Kripto Bot'a Hoş Geldin!**
-
-💡 **En Popüler Komutlar:**
-📊 /analiz COIN - Teknik analiz + AI yorumu
-💰 /fiyat COIN - Güncel fiyat bilgisi
-⏰ /alarm COIN - Fiyat alarmı kur
-
-🎯 **Örnek kullanım:**
-• /analiz btc (sonra timeframe seç)
-• /fiyat eth
-• /alarm sol
-
-📋 Tüm komutlar için: /yardim"""
-    
-    bot.send_message(message.chat.id, start_message, 
+    bot.send_message(message.chat.id, WELCOME_MESSAGE, 
                      reply_markup=markup, parse_mode="Markdown")
 
 @bot.message_handler(commands=['yardim', 'help'])
@@ -95,39 +89,50 @@ def yardim(message):
     if not should_respond_in_group(message):
         return
         
-    help_text = """📊 **Kripto Bot Komutları**
+    help_text = """🤖 **Gelişmiş Kripto Bot Komutları:**
 
-💰 **Temel Komutlar:**
-• /fiyat COIN - Fiyat bilgisi
-• /top10 - En büyük 10 cryptocurrency
-• /analiz COIN - Teknik analiz (timeframe seçimi)
+📊 **Ana Komutlar:**
+- /fiyat COIN - Coin fiyatı + detaylar
+- /top10 - En büyük 10 cryptocurrency
+- /trending - Trend olan coinler
 
-⏰ **Alarm Sistemi:**
-• /alarm COIN - Fiyat alarmı kur
-• /alarmlist - Aktif alarmları göster
-• /alarmstop COIN - Alarm sil
+📈 **Gelişmiş Analiz:**
+- /analiz COIN - Temel analiz (1d)
+- /analiz COIN 4h - Timeframe analizi
+- /analiz COIN multi - Çoklu timeframe
+- /analiz COIN ai - AI ile analiz
+- /analiz COIN fib - Fibonacci seviyeleri
 
-🔧 **Diğer:**
-• /ping - Bot çalışıyor mu test et
-• /yardim - Bu yardım menüsü
+💧 **Likidite Analizi:**
+- /liquidity COIN - Professional heatmap
+- /liquidity COIN 1h - Timeframe seçimi
+- /likidite COIN - Türkçe komut
+
+🎯 **Trading Sinyalleri:**
+- /signals COIN - Güçlü trading sinyalleri
+- /breakout - Breakout adayları (gelişmiş)
+- /predict COIN - AI fiyat tahmini
+
+⚡ **Alarm Sistemi:**
+- /alarm COIN - Fiyat alarmı kur
+- /alarmlist - Aktif alarmları göster
+- /alarmstop COIN - Alarm kaldır
+
+🌐 **Piyasa Analizi:**
+- /korku - Fear & Greed Index
 
 💡 **Örnek Kullanım:**
-• /analiz btc → Timeframe butonları çıkar → Seç
-• /fiyat eth → Ethereum fiyat bilgisi
-• /alarm sol → Solana için alarm kur
+- /liquidity btc 4h
+- /analiz eth multi
+- /signals sol
+- /predict ada 7
 
-🚀 **Yeni Özellikler:**
-✅ AI yorumu her analizde otomatik
-✅ Fibonacci seviyeleri dahil
-✅ Trading önerileri
-✅ Destek/Direnç seviyeleri
-
-⚠️ Bu bot yatırım tavsiyesi vermez!"""
+🚀 **500+ coin + Professional heatmaps!**"""
     
     bot.send_message(message.chat.id, help_text, parse_mode="Markdown")
 
 # =============================================================================
-# TEST KOMUTLARI - SADECE GEREKLİLER
+# GELIŞMIŞ TEST KOMUTLARI
 # =============================================================================
 
 @bot.message_handler(commands=['test'])
@@ -137,11 +142,23 @@ def test_bot(message):
         return
     
     bot.send_message(message.chat.id, 
-                     "✅ **Bot Çalışıyor!**\n\n"
-                     f"🤖 Bot: @{bot_username}\n"
+                     "✅ **Gelişmiş Bot Çalışıyor!**\n\n"
+                     f"🤖 Bot adı: @{bot_username}\n"
                      f"💬 Chat ID: {message.chat.id}\n"
                      f"👤 Kullanıcı: {message.from_user.first_name}\n\n"
-                     f"🚀 **Ana komut:** /analiz btc",
+                     f"🚀 **Yeni Özellikler:**\n"
+                     f"• Çoklu timeframe analizi ✅\n"
+                     f"• AI fiyat tahmini ✅\n"
+                     f"• Gelişmiş indikatörler ✅\n"
+                     f"• Sinyal gücü sistemi ✅\n"
+                     f"• Entry/Exit noktaları ✅\n"
+                     f"• Risk analizi ✅\n"
+                     f"• Likidite haritası ✅\n\n"
+                     f"🎯 **Test komutları:**\n"
+                     f"• /liquidity btc\n"
+                     f"• /analiz eth multi\n"
+                     f"• /signals sol\n"
+                     f"• /predict ada",
                      parse_mode="Markdown")
 
 @bot.message_handler(commands=['ping'])
@@ -150,7 +167,7 @@ def ping(message):
     if not should_respond_in_group(message):
         return
     
-    bot.send_message(message.chat.id, "🏓 **PONG!** Bot aktif! 🚀")
+    bot.send_message(message.chat.id, "🏓 **PONG!** Gelişmiş bot + likidite haritası aktif! 💧⚡")
 
 @bot.message_handler(commands=['status'])
 def bot_status(message):
@@ -159,63 +176,123 @@ def bot_status(message):
         return
     
     try:
+        # Basit istatistikler
         from utils.binance_api import BINANCE_SYMBOLS
         
         status_text = f"📊 **Bot Durumu:**\n\n"
         status_text += f"🤖 **Bot:** @{bot_username}\n"
         status_text += f"📈 **Desteklenen coinler:** {len(BINANCE_SYMBOLS)} adet\n"
         status_text += f"🎯 **AI Analiz:** {'✅ Aktif' if OPENAI_API_KEY and OPENAI_API_KEY != 'BURAYA_OPENAI_KEYINI_YAZ' else '❌ API key gerekli'}\n"
-        status_text += f"⏰ **Alarm sistemi:** ✅ Aktif\n\n"
+        status_text += f"⏰ **Alarm sistemi:** ✅ Aktif\n"
+        status_text += f"📊 **Gelişmiş analiz:** ✅ Aktif\n"
+        status_text += f"💧 **Likidite haritası:** ✅ Aktif\n\n"
         
-        status_text += f"🔥 **Aktif Özellikler:**\n"
-        status_text += f"• Teknik analiz + AI yorumu\n"
-        status_text += f"• Fibonacci seviyeleri dahil\n"
-        status_text += f"• Trading önerileri\n"
-        status_text += f"• Fiyat alarm sistemi\n\n"
+        status_text += f"🔥 **Son güncellemeler:**\n"
+        status_text += f"• Professional likidite haritası\n"
+        status_text += f"• CoinGlass tarzı görselleştirme\n"
+        status_text += f"• Volume-based destek/direnç\n"
+        status_text += f"• Çoklu timeframe analizi\n"
+        status_text += f"• AI ile fiyat tahmini\n"
+        status_text += f"• Fibonacci retracement\n"
+        status_text += f"• Gelişmiş sinyal sistemi\n"
+        status_text += f"• Risk yönetimi araçları\n\n"
         
-        status_text += f"🎯 **En popüler:** /analiz btc"
+        status_text += f"🎯 **En popüler komutlar:**\n"
+        status_text += f"• /liquidity btc 4h\n"
+        status_text += f"• /analiz eth multi\n"
+        status_text += f"• /signals sol"
         
         bot.send_message(message.chat.id, status_text, parse_mode="Markdown")
         
     except Exception as e:
         print(f"Status komutu hatası: {e}")
-        bot.send_message(message.chat.id, "✅ Bot çalışıyor!")
+        bot.send_message(message.chat.id, "✅ Bot çalışıyor ama istatistik alınamadı!")
 
 # =============================================================================
-# HIZLI KOMUTLAR - SADELEŞTİRİLMİŞ
+# HİZLI KOMUTLAR (SHORTCUTS)
 # =============================================================================
 
 @bot.message_handler(commands=['btc', 'bitcoin'])
 def quick_btc(message):
-    """Hızlı Bitcoin menüsü"""
+    """Hızlı Bitcoin analizi"""
     if not should_respond_in_group(message):
         return
     
     bot.send_message(message.chat.id, 
-                     "⚡ **Bitcoin Hızlı Menü:**\n\n"
-                     "📊 /analiz btc - Teknik analiz\n"
-                     "💰 /fiyat btc - Fiyat bilgisi\n"
-                     "⏰ /alarm btc - Fiyat alarmı")
+                     "⚡ **Hızlı Bitcoin Menüsü:**\n\n"
+                     "📊 /fiyat btc - Fiyat bilgisi\n"
+                     "📈 /analiz btc - Teknik analiz\n"
+                     "💧 /liquidity btc - Likidite haritası\n"
+                     "🎯 /signals btc - Trading sinyalleri\n"
+                     "🤖 /predict btc - AI tahmini\n"
+                     "⏰ /alarm btc - Fiyat alarmı\n\n"
+                     "🚀 Hangisini istiyorsun?")
 
 @bot.message_handler(commands=['eth', 'ethereum'])
 def quick_eth(message):
-    """Hızlı Ethereum menüsü"""
+    """Hızlı Ethereum analizi"""
     if not should_respond_in_group(message):
         return
     
     bot.send_message(message.chat.id, 
-                     "⚡ **Ethereum Hızlı Menü:**\n\n"
-                     "📊 /analiz eth - Teknik analiz\n"
-                     "💰 /fiyat eth - Fiyat bilgisi\n"
-                     "⏰ /alarm eth - Fiyat alarmı")
+                     "⚡ **Hızlı Ethereum Menüsü:**\n\n"
+                     "📊 /fiyat eth - Fiyat bilgisi\n"
+                     "📈 /analiz eth multi - Çoklu timeframe\n"
+                     "💧 /liquidity eth 1h - Likidite haritası\n"
+                     "🎯 /signals eth - Trading sinyalleri\n"
+                     "🤖 /predict eth 7 - 7 günlük tahmin\n"
+                     "⏰ /alarm eth - Fiyat alarmı\n\n"
+                     "🔥 Hangisini seçiyorsun?")
 
 # =============================================================================
-# GENEL MESAJ HANDLERİ - SADELEŞTİRİLMİŞ
+# PLACEHOLDER KOMUTLAR (GELECEKTEKİ ÖZELLİKLER)
+# =============================================================================
+
+@bot.message_handler(commands=['makro'])
+def makro_placeholder(message):
+    bot.send_message(message.chat.id, 
+                     "🌐 **Makro analiz sonraki güncellemede!**\n\n"
+                     "📊 Gelecek özellikler:\n"
+                     "• DXY, S&P 500, VIX analizi\n"
+                     "• BTC-SPX korelasyonu\n"
+                     "• Fed faiz oranları etkisi\n"
+                     "• Makro sentiment analizi\n\n"
+                     "💡 Şimdilik: /analiz COIN multi komutunu kullan!\n"
+                     "🤖 AI analiz: /analiz COIN ai\n"
+                     "💧 Likidite: /liquidity COIN")
+
+@bot.message_handler(commands=['portfolio'])
+def portfolio_placeholder(message):
+    bot.send_message(message.chat.id, 
+                     "💼 **Portfolio takibi geliştiriliyor!**\n\n"
+                     "🎯 Gelecek özellikler:\n"
+                     "• Kişisel portfolio girişi\n"
+                     "• Kar/zarar takibi\n"
+                     "• Portfolio alarmları\n"
+                     "• Risk analizi\n"
+                     "• Performans raporları\n\n"
+                     "⏰ Şimdilik: /alarm sistemi ile takip yap!\n"
+                     "💧 Likidite analizi: /liquidity COIN")
+
+@bot.message_handler(commands=['news'])
+def news_placeholder(message):
+    bot.send_message(message.chat.id, 
+                     "📰 **Kripto haberleri yakında!**\n\n"
+                     "🔥 Gelecek özellikler:\n"
+                     "• Güncel kripto haberleri\n"
+                     "• Sentiment analizi\n"
+                     "• Önemli duyurular\n"
+                     "• Fiyat etkisi analizi\n\n"
+                     "💡 Şimdilik: /korku komutu ile sentiment'i takip et!\n"
+                     "💧 Likidite: /liquidity COIN")
+
+# =============================================================================
+# GENEL MESAJ HANDLERİ
 # =============================================================================
 
 @bot.message_handler(func=lambda message: True)
 def echo_all(message):
-    """Sadeleştirilmiş genel mesaj handler"""
+    """Tüm diğer mesajlar için gelişmiş handler"""
     if not should_respond_in_group(message):
         return
     
@@ -224,10 +301,10 @@ def echo_all(message):
     # Selamlaşma
     if any(word in text for word in ['merhaba', 'selam', 'hello', 'hi', 'hey']):
         greetings = [
-            "🚀 Selam! /analiz btc ile Bitcoin analizi yap!",
-            "👋 Hey! Hangi coin'i analiz edelim? /analiz COIN",
-            "😄 Merhaba! Yeni AI analiz sistemi için /analiz dene!",
-            "🤖 Selam! /yardim ile tüm komutları gör!"
+            "🚀 Selam! Hangi coin'i analiz edelim? (/analiz COIN)",
+            "👋 Hey! Yeni likidite haritası özelliğini denedin mi? (/liquidity COIN)",
+            "😄 Merhaba! Professional analiz için /liquidity btc yaz!",
+            "🤖 Selam! Gelişmiş sinyal sistemi için /signals COIN dene!"
         ]
         response = greetings[hash(text) % len(greetings)]
         bot.send_message(message.chat.id, response)
@@ -235,14 +312,18 @@ def echo_all(message):
     # Yardım isteği
     elif any(word in text for word in ['yardım', 'help', 'komut', 'nasıl']):
         bot.send_message(message.chat.id, 
-                         "🆘 **Hızlı Yardım:**\n\n"
-                         "📊 **Ana komut:** /analiz COIN\n"
-                         "💰 **Fiyat:** /fiyat COIN\n"
+                         "🆘 **Yardım Menüsü:**\n\n"
+                         "📋 **Tüm komutlar:** /yardim\n"
+                         "📊 **Fiyat:** /fiyat COIN\n"
+                         "📈 **Analiz:** /analiz COIN\n"
+                         "💧 **Likidite:** /liquidity COIN\n"
+                         "🎯 **Sinyaller:** /signals COIN\n"
+                         "🤖 **AI tahmin:** /predict COIN\n"
                          "⏰ **Alarm:** /alarm COIN\n"
-                         "📋 **Tümü:** /yardim\n\n"
-                         "💡 **Örnek:** /analiz btc")
+                         "🏓 **Test:** /ping\n\n"
+                         "💡 **Yeni:** Professional heatmap için /liquidity btc!")
     
-    # Coin soruları
+    # Coin soruları (gelişmiş AI)
     elif any(word in text for word in ['btc', 'bitcoin', 'eth', 'ethereum', 'sol', 'solana']):
         coin_mentioned = None
         if any(word in text for word in ['btc', 'bitcoin']):
@@ -254,43 +335,64 @@ def echo_all(message):
         
         if coin_mentioned:
             bot.send_message(message.chat.id, 
-                             f"🎯 **{coin_mentioned.upper()} için:**\n\n"
-                             f"📊 /analiz {coin_mentioned} - Teknik analiz\n"
-                             f"💰 /fiyat {coin_mentioned} - Fiyat bilgisi\n"
-                             f"⏰ /alarm {coin_mentioned} - Fiyat alarmı\n\n"
-                             f"Hangisini istiyorsun?")
-        else:
-            bot.send_message(message.chat.id, 
-                             "🎯 **Coin analizi için:**\n\n"
-                             "📊 /analiz btc (Bitcoin analizi)\n"
-                             "📊 /analiz eth (Ethereum analizi)\n"
-                             "💰 /fiyat COIN (fiyat bilgisi)")
+                             f"🎯 **{coin_mentioned.upper()} Analiz Menüsü:**\n\n"
+                             f"📊 **Temel:** /fiyat {coin_mentioned}\n"
+                             f"📈 **Analiz:** /analiz {coin_mentioned}\n"
+                             f"💧 **Likidite:** /liquidity {coin_mentioned}\n"
+                             f"🔥 **Çoklu TF:** /analiz {coin_mentioned} multi\n"
+                             f"🤖 **AI tahmin:** /predict {coin_mentioned}\n"
+                             f"🎯 **Sinyaller:** /signals {coin_mentioned}\n"
+                             f"⏰ **Alarm:** /alarm {coin_mentioned}\n\n"
+                             f"💡 Hangi analizi istiyorsun?")
     
     # Trading soruları
-    elif any(word in text for word in ['al', 'sat', 'buy', 'sell', 'trade', 'analiz']):
+    elif any(word in text for word in ['al', 'sat', 'buy', 'sell', 'trade', 'sinyal', 'likidite', 'liquidity']):
         bot.send_message(message.chat.id, 
-                         "🎯 **Analiz için:**\n\n"
-                         "📊 /analiz btc - Bitcoin analizi\n"
-                         "📊 /analiz eth - Ethereum analizi\n"
-                         "💡 Her analizde AI yorumu + trading önerisi\n\n"
+                         "🎯 **Trading Araçları:**\n\n"
+                         "💧 **Likidite haritası:** /liquidity COIN\n"
+                         "📊 **Güçlü sinyaller:** /signals COIN\n"
+                         "📈 **Detaylı analiz:** /analiz COIN multi\n"
+                         "🔥 **Breakout adayları:** /breakout\n"
+                         "🤖 **AI tahmini:** /predict COIN\n"
+                         "😱 **Piyasa sentiment:** /korku\n\n"
+                         "⚠️ **Risk uyarısı:** Bu analizler yatırım tavsiyesi değildir!")
+    
+    # AI ve tahmin soruları
+    elif any(word in text for word in ['ai', 'tahmin', 'predict', 'gelecek', 'nolur']):
+        bot.send_message(message.chat.id, 
+                         "🤖 **AI Tahmin Sistemi:**\n\n"
+                         "🎯 **Kullanım:** /predict COIN [GÜN]\n\n"
+                         "**Örnekler:**\n"
+                         "• /predict btc - 7 günlük tahmin\n"
+                         "• /predict eth 14 - 14 günlük tahmin\n"
+                         "• /predict sol 30 - Maksimum 30 gün\n\n"
+                         "🔥 **Özellikler:**\n"
+                         "• GPT-4 ile analiz\n"
+                         "• Teknik indikatör bazlı\n"
+                         "• Risk/ödül hesaplaması\n\n"
+                         "💧 **Bonus:** /liquidity COIN ile likidite analizi!\n"
                          "⚠️ Yatırım tavsiyesi değildir!")
     
     # Diğer durumlarda
     else:
         bot.send_message(message.chat.id, 
                          "🤔 **Ne yapmak istiyorsun?**\n\n"
-                         "🔥 **Popüler:**\n"
-                         "📊 /analiz btc - Bitcoin analizi\n"
-                         "💰 /fiyat eth - Ethereum fiyatı\n"
-                         "⏰ /alarm sol - Solana alarmı\n\n"
-                         "📋 **Tüm komutlar:** /yardim")
+                         "🔥 **Popüler komutlar:**\n"
+                         "• /liquidity btc - Professional heatmap\n"
+                         "• /analiz eth multi - Çoklu timeframe\n"
+                         "• /signals sol - Trading sinyalleri\n"
+                         "• /predict ada - AI tahmini\n"
+                         "• /breakout - Breakout adayları\n"
+                         "• /top10 - En büyük coinler\n\n"
+                         "📋 **Tüm komutlar:** /yardim\n"
+                         "🏓 **Bot testi:** /ping")
 
 # =============================================================================
-# BOT BAŞLATMA - TEMİZLENMİŞ
+# BOT BAŞLATMA (GELİŞMİŞ + LİKİDİTE)
 # =============================================================================
 
 def main():
-    """Ana bot fonksiyonu - temizlenmiş versiyon"""
+    """Ana bot fonksiyonu - gelişmiş versiyon + likidite haritası"""
     
     print("🔄 Sistem hazırlıkları...")
     
@@ -306,35 +408,63 @@ def main():
     # OpenAI kontrolü
     ai_status = "✅ Aktif" if OPENAI_API_KEY and OPENAI_API_KEY != "BURAYA_OPENAI_KEYINI_YAZ" else "❌ API key gerekli"
     
-    print("🚀 Temizlenmiş Kripto Bot başlatılıyor...")
+    print("🚀 Gelişmiş Kripto Bot başlatılıyor...")
     print(f"🤖 Bot kullanıcı adı: @{bot_username}")
     print("📱 Telegram'da kullanmaya başlayabilirsin!")
-    print("🎯 CLEAN VERSION - Sadece gerekli özellikler!")
+    print("🎯 FULL ADVANCED VERSION - Tüm özellikler aktif!")
+    
+    print(f"\n🌟 **YENİ ÖZELLİKLER:**")
+    print("💧 Professional likidite haritası (CoinGlass tarzı)")
+    print("🔥 Çoklu timeframe analizi (1h, 4h, 1d, 1w)")
+    print(f"🤖 AI fiyat tahmini ({ai_status})")
+    print("📐 Fibonacci retracement seviyeleri")
+    print("📊 Gelişmiş teknik indikatörler")
+    print("🎯 Sinyal gücü sistemi (1-10)")
+    print("💼 Entry/Exit noktaları + Stop-loss")
+    print("⚖️ Risk analizi ve yönetimi")
+    print("🔥 Gelişmiş breakout analizi")
     
     print(f"\n✅ **AKTİF ÖZELLİKLER:**")
     print("• Fiyat sorgulama (/fiyat)")
     print("• Top 10 listesi (/top10)")
-    print("• Teknik analiz + AI yorumu (/analiz)")
-    print("• Fiyat alarmları (/alarm, /alarmlist, /alarmstop)")
-    print("• Destek/Direnç + Fibonacci dahil")
-    print("• Trading önerileri")
+    print("• Trend coinler (/trending)")
+    print("• Gelişmiş teknik analiz (/analiz)")
+    print("• Professional likidite haritası (/liquidity)")
+    print("• Çoklu timeframe (/analiz COIN multi)")
+    print("• AI tahmin (/predict)")
+    print("• Trading sinyalleri (/signals)")
+    print("• Gelişmiş breakout (/breakout)")
+    print("• Fear & Greed Index (/korku)")
+    print("• Fiyat alarmları (/alarm)")
+    print("• Alarm yönetimi (/alarmlist, /alarmstop)")
+    print("• Gelişmiş grafikler")
     print("• Grup chat desteği")
-    print("• Temiz ve sade arayüz")
+    print("• Hızlı komutlar (/btc, /eth)")
     
-    print(f"\n🤖 **AI Durumu:** {ai_status}")
+    print(f"\n🔄 **GELECEKTEKİ ÖZELLİKLER:**")
+    print("• Order book derinlik entegrasyonu")
+    print("• Perpetual liquidation levels")
+    print("• Multi-exchange likidite")
+    print("• Makroekonomik analiz (/makro)")
+    print("• Portfolio takibi (/portfolio)")
+    print("• Kripto haberleri (/news)")
+    print("• Social sentiment analizi")
+    print("• DeFi protokol entegrasyonu")
     
     print(f"\n🎯 **ÖRNEK KOMUTLAR:**")
-    print("• /analiz btc → Timeframe seç → Analiz al")
-    print("• /fiyat eth → Ethereum fiyatı")
-    print("• /alarm sol → Solana alarmı kur")
-    print("• /top10 → En büyük 10 coin")
+    print("• /liquidity btc 4h")
+    print("• /analiz eth multi")
+    print("• /signals sol")
+    print("• /predict ada 7")
+    print("• /breakout")
     
     # Bot'u başlat
     while True:
         try:
-            print(f"\n🟢 Temizlenmiş bot çalışıyor ve komutları bekliyor...")
-            print("📊 Sadeleştirilmiş ve kullanıcı dostu sistem hazır!")
-            print("🎯 Ana komut: /analiz COIN")
+            print(f"\n🟢 Gelişmiş bot + likidite haritası çalışıyor ve komutları bekliyor...")
+            print("💧 Professional heatmap sistemi hazır!")
+            print("📊 500+ coin + CoinGlass tarzı analiz sistemi aktif!")
+            print("🎯 Yeni özellikleri test etmeyi unutma!")
             bot.polling(none_stop=True, interval=0, timeout=20)
         except Exception as e:
             print(f"❌ Bot hatası: {e}")
