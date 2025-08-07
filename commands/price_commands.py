@@ -1,11 +1,19 @@
 """
 Price Commands - Fiyat ile ilgili komutlar
-/fiyat, /top10, /trending komutları
+/fiyat, /top10, /trending komutları - HABER SİSTEMİ ENTEGRELİ
 """
 
 import requests
 import telebot
 from config import *
+
+# 🔥 HABER SİSTEMİ İMPORT
+try:
+    from utils.news_system import add_active_user
+except ImportError:
+    print("⚠️ Haber sistemi import edilemedi")
+    def add_active_user(user_id):
+        pass  # Boş fonksiyon - hata vermemesi için
 
 def register_price_commands(bot):
     """Fiyat komutlarını bot'a kaydet"""
@@ -14,6 +22,9 @@ def register_price_commands(bot):
     def fiyat(message):
         """Coin fiyatı getir"""
         try:
+            # 🔥 HABER SİSTEMİ: Kullanıcıyı otomatik kaydet
+            add_active_user(message.from_user.id)
+            
             parts = message.text.strip().split()
             if len(parts) < 2:
                 bot.send_message(message.chat.id, 
@@ -58,6 +69,9 @@ def register_price_commands(bot):
     def top10_coins(message):
         """En büyük 10 cryptocurrency"""
         try:
+            # 🔥 HABER SİSTEMİ: Kullanıcıyı otomatik kaydet
+            add_active_user(message.from_user.id)
+            
             bot.send_message(message.chat.id, "🔄 Top 10 yükleniyor...")
             
             url = f"{COINGECKO_BASE_URL}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1"
@@ -102,6 +116,9 @@ def register_price_commands(bot):
     def trending_coins(message):
         """Trend olan coinler"""
         try:
+            # 🔥 HABER SİSTEMİ: Kullanıcıyı otomatik kaydet
+            add_active_user(message.from_user.id)
+            
             bot.send_message(message.chat.id, "🔥 Trend coinler yükleniyor...")
             
             url = f"{COINGECKO_BASE_URL}/search/trending"
