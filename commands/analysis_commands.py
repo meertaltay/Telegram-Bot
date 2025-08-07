@@ -1,43 +1,41 @@
 """
-Advanced Analysis Commands - Gelişmiş teknik analiz komutları
-/analiz, /breakout, /makro komutları + AI tahmin + Çoklu timeframe
+Simplified Analysis Commands - Tek komut sistemi
+/analiz - Tüm analiz türlerini içerir
 """
 
 import requests
 import telebot
+from telebot import types
+import pandas as pd
 from config import *
 from utils.binance_api import find_binance_symbol, get_binance_ohlc
-from utils.technical_analysis import *
 from utils.chart_generator import create_advanced_chart
 import openai
 
+# Kullanıcı durumlarını takip etmek için
+user_analysis_states = {}
+
 def register_analysis_commands(bot):
-    """Gelişmiş analiz komutlarını bot'a kaydet"""
+    """Basitleştirilmiş analiz komutlarını bot'a kaydet"""
     
     @bot.message_handler(commands=['analiz'])
     def analiz(message):
-        """Gelişmiş teknik analiz yap"""
+        """Ana analiz komutu - Tüm analiz türleri"""
         try:
             parts = message.text.strip().split()
             if len(parts) < 2:
                 bot.send_message(message.chat.id, 
-                    "📊 **Gelişmiş Teknik Analiz:**\n\n"
-                    "🔹 **Temel:** /analiz COIN\n"
-                    "🔹 **Timeframe:** /analiz COIN 4h\n"
-                    "🔹 **AI Tahmin:** /analiz COIN ai\n"
-                    "🔹 **Çoklu TF:** /analiz COIN multi\n"
-                    "🔹 **Fibonacci:** /analiz COIN fib\n\n"
+                    "📊 **Gelişmiş Kripto Analiz**\n\n"
+                    "🔹 **Kullanım:** /analiz COIN\n\n"
                     "**Örnekler:**\n"
-                    "• /analiz btc 1h\n"
-                    "• /analiz eth ai\n"
-                    "• /analiz sol multi\n"
-                    "• /analiz ada fib\n\n"
-                    "📈 **Timeframeler:** 1h, 4h, 1d, 1w",
+                    "• /analiz btc\n"
+                    "• /analiz eth\n"
+                    "• /analiz sol\n\n"
+                    "📈 Coin seçtikten sonra analiz türü seçebilirsiniz!",
                     parse_mode="Markdown")
                 return
 
             coin_input = parts[1].lower()
-            analysis_type = parts[2].lower() if len(parts) > 2 else "1d"
             
             # Binance sembolü bul
             binance_symbol = find_binance_symbol(coin_input)
@@ -50,153 +48,170 @@ def register_analysis_commands(bot):
                     parse_mode="Markdown")
                 return
 
-            # Analiz tipine göre farklı işlemler
-            if analysis_type == "ai":
-                await analyze_with_ai(message, binance_symbol, coin_input)
+            # Kullanıcı durumunu kaydet
+            user_analysis_states[message.from_user.id] = {
+                'coin': coin_input,
+                'symbol': binance_symbol,
+                'chat_id': message.chat.id
+            }
+
+            # Ana analiz menüsü oluştur
+            markup = types.InlineKeyboardMarkup(row_width=2)
+            
+            # Timeframe butonları
+            btn_1h = types.InlineKeyboardButton("📊 1 Saat", callback_data=f"tf_1h_{coin_input}")
+            btn_4h = types.InlineKeyboardButton("📈 4 Saat", callback_data=f"tf_4h_{coin_input}")
+            btn_1d = types.InlineKeyboardButton("📉 1 Gün", callback_data=f"tf_1d_{coin_input}")
+            btn_1w = types.InlineKeyboardButton("📅 1 Hafta", callback_data=f"tf_1w_{coin_input}")
+            
+            # Özel analiz butonları
+            btn_multi = types.InlineKeyboardButton("🔥 Çoklu TF", callback_data=f"multi_{coin_input}")
+            btn_ai = types.InlineKeyboardButton("🤖 AI Tahmin", callback_data=f"ai_{coin_input}")
+            btn_signals = types.InlineKeyboardButton("🎯 Sinyaller", callback_data=f"signals_{coin_input}")
+            btn_fib = types.InlineKeyboardButton("📐 Fibonacci", callback_data=f"fib_{coin_input}")
+            
+            # Buton dizilimi
+            markup.add(btn_1h, btn_4h)
+            markup.add(btn_1d, btn_1w)
+            markup.add(btn_multi, btn_ai)
+            markup.add(btn_signals, btn_fib)
+            
+            # Güncel fiyatı göster
+            try:
+                df_quick = get_binance_ohlc(binance_symbol, interval="1d", limit=2)
+                if df_quick is not None and not df_quick.empty:
+                    current_price = df_quick['close'].iloc[-1]
+                    prev_price = df_quick['close'].iloc[-2]
+                    change_24h = ((current_price - prev_price) / prev_price) * 100
+                    
+                    # Fiyat formatı
+                    if current_price < 0.01:
+                        price_str = f"${current_price:.8f}"
+                    elif current_price < 1:
+                        price_str = f"${current_price:.6f}"
+                    else:
+                        price_str = f"${current_price:,.4f}"
+                    
+                    change_emoji = "📈" if change_24h > 0 else "📉"
+                    change_color = "🟢" if change_24h > 0 else "🔴"
+                    
+                    price_info = f"\n💰 **Güncel:** {price_str} | {change_color} %{change_24h:+.2f} {change_emoji}\n"
+                else:
+                    price_info = ""
+            except:
+                price_info = ""
+
+            coin_name = binance_symbol.replace('USDT', '').upper()
+            
+            bot.send_message(
+                message.chat.id,
+                f"🎯 **{coin_name} - Gelişmiş Analiz**{price_info}\n"
+                f"📊 **Hangi analizi istiyorsunuz?**\n\n"
+                f"**⏰ Timeframe Analizi:**\n"
+                f"🔹 1 Saat - Scalping & Kısa vadeli\n"
+                f"🔹 4 Saat - Günlük pozisyonlar\n" 
+                f"🔹 1 Gün - Swing trading\n"
+                f"🔹 1 Hafta - Uzun vadeli yatırım\n\n"
+                f"**🚀 Özel Analizler:**\n"
+                f"🔹 Çoklu TF - Tüm timeframe'ler\n"
+                f"🔹 AI Tahmin - Fiyat tahmini\n"
+                f"🔹 Sinyaller - Trading sinyalleri\n"
+                f"🔹 Fibonacci - Retracement seviyeleri\n\n"
+                f"👇 **Bir seçenek tıklayın:**",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+            
+        except Exception as e:
+            print(f"Analiz komutu hatası: {e}")
+            bot.send_message(message.chat.id, "❌ Analiz başlatılamadı! Tekrar dene.")
+
+    # Callback handler for all analysis types
+    @bot.callback_query_handler(func=lambda call: call.data.startswith(('tf_', 'multi_', 'ai_', 'signals_', 'fib_')))
+    def handle_analysis_selection(call):
+        """Analiz seçimi işle"""
+        try:
+            # Callback data parse et
+            if call.data.startswith('tf_'):
+                # Timeframe analizi: tf_1h_btc
+                parts = call.data.split('_')
+                timeframe = parts[1]
+                coin_input = parts[2]
+                analysis_type = "timeframe"
+            else:
+                # Özel analizler: multi_btc, ai_btc, etc.
+                parts = call.data.split('_')
+                analysis_type = parts[0]
+                coin_input = parts[1]
+                timeframe = "1d"  # Default
+            
+            user_id = call.from_user.id
+            
+            # Kullanıcı durumu kontrol et
+            if user_id not in user_analysis_states:
+                bot.answer_callback_query(call.id, "⚠️ Lütfen /analiz komutu ile başlayın!")
+                return
+            
+            user_state = user_analysis_states[user_id]
+            binance_symbol = user_state['symbol']
+            
+            # Buton cevabı ver
+            analysis_names = {
+                'tf_1h': '1 Saatlik Teknik Analiz',
+                'tf_4h': '4 Saatlik Teknik Analiz', 
+                'tf_1d': '1 Günlük Teknik Analiz',
+                'tf_1w': '1 Haftalık Teknik Analiz',
+                'multi': 'Çoklu Timeframe Analizi',
+                'ai': 'AI Fiyat Tahmini',
+                'signals': 'Trading Sinyalleri',
+                'fib': 'Fibonacci Analizi'
+            }
+            
+            analysis_key = f"{analysis_type}_{timeframe}" if analysis_type == "timeframe" else analysis_type
+            analysis_name = analysis_names.get(analysis_key, 'Analiz')
+            
+            bot.answer_callback_query(call.id, f"🎯 {analysis_name} başlıyor...")
+            
+            # Mesajı güncelle
+            bot.edit_message_text(
+                f"⏳ **{binance_symbol} - {analysis_name}**\n\n"
+                f"📊 Veriler alınıyor...\n"
+                f"🤖 AI yorumu hazırlanıyor...\n"
+                f"📈 Grafik oluşturuluyor...\n\n"
+                f"⚡ Bu işlem 10-15 saniye sürebilir.",
+                call.message.chat.id,
+                call.message.message_id,
+                parse_mode="Markdown"
+            )
+            
+            # Analiz tipine göre işlem yap
+            if analysis_type == "timeframe":
+                perform_timeframe_analysis(call.message, binance_symbol, coin_input, timeframe, bot)
             elif analysis_type == "multi":
-                await analyze_multiple_timeframes_command(message, binance_symbol, coin_input)
+                perform_multi_timeframe_analysis(call.message, binance_symbol, coin_input, bot)
+            elif analysis_type == "ai":
+                perform_ai_prediction(call.message, binance_symbol, coin_input, bot)
+            elif analysis_type == "signals":
+                perform_signals_analysis(call.message, binance_symbol, coin_input, bot)
             elif analysis_type == "fib":
-                await analyze_with_fibonacci(message, binance_symbol, coin_input)
-            elif analysis_type in ["1h", "4h", "1d", "1w"]:
-                await analyze_single_timeframe(message, binance_symbol, coin_input, analysis_type)
-            else:
-                # Default 1d analizi
-                await analyze_single_timeframe(message, binance_symbol, coin_input, "1d")
+                perform_fibonacci_analysis(call.message, binance_symbol, coin_input, bot)
             
-        except Exception as e:
-            print(f"Analiz hatası: {e}")
-            bot.send_message(message.chat.id, "❌ Analiz yapılamadı! Biraz sonra tekrar dene.")
-
-    @bot.message_handler(commands=['signals'])
-    def trading_signals(message):
-        """Güçlü trading sinyalleri"""
-        try:
-            parts = message.text.strip().split()
-            if len(parts) < 2:
-                bot.send_message(message.chat.id, 
-                    "🎯 **Trading Sinyalleri:**\n\n"
-                    "/signals COIN\n\n"
-                    "**Özellikler:**\n"
-                    "• Sinyal gücü skoru (1-10)\n"
-                    "• Entry/Exit noktaları\n"
-                    "• Stop-loss önerileri\n"
-                    "• Risk/Reward oranı\n\n"
-                    "**Örnek:** /signals btc",
-                    parse_mode="Markdown")
-                return
-
-            coin_input = parts[1].lower()
-            binance_symbol = find_binance_symbol(coin_input)
-            
-            if not binance_symbol:
-                bot.send_message(message.chat.id, f"❌ '{coin_input.upper()}' bulunamadı!")
-                return
-
-            bot.send_message(message.chat.id, f"🎯 {binance_symbol} sinyalleri analiz ediliyor...")
-            
-            # Multi-timeframe sinyal analizi
-            signals_analysis = generate_comprehensive_signals(binance_symbol)
-            
-            if signals_analysis:
-                signals_message = format_signals_message(signals_analysis, coin_input)
-                bot.send_message(message.chat.id, signals_message, parse_mode="Markdown")
-            else:
-                bot.send_message(message.chat.id, "❌ Sinyal analizi yapılamadı!")
+            # Kullanıcı durumunu temizle
+            if user_id in user_analysis_states:
+                del user_analysis_states[user_id]
                 
         except Exception as e:
-            print(f"Sinyal analizi hatası: {e}")
-            bot.send_message(message.chat.id, "❌ Sinyal analizi yapılamadı!")
-
-    @bot.message_handler(commands=['breakout'])
-    def breakout_analiz(message):
-        """Gelişmiş breakout adayları analiz et"""
-        try:
-            bot.send_message(message.chat.id, "🔥 Gelişmiş breakout analizi başlıyor...")
-            
-            # Gelişmiş breakout analizi
-            breakout_results = analyze_breakout_candidates_advanced()
-            
-            if not breakout_results:
-                bot.send_message(message.chat.id, 
-                    "❌ Şu anda güçlü breakout adayı bulunamadı!")
-                return
-            
-            # Sonuç mesajı
-            breakout_message = format_advanced_breakout_message(breakout_results)
-            bot.send_message(message.chat.id, breakout_message, parse_mode="Markdown")
-            
-        except Exception as e:
-            print(f"Breakout analiz hatası: {e}")
-            bot.send_message(message.chat.id, "❌ Breakout analizi yapılamadı!")
-
-    @bot.message_handler(commands=['korku'])
-    def korku_index(message):
-        """Gelişmiş Fear & Greed Index"""
-        try:
-            # Fear & Greed Index
-            fng_data = get_fear_greed_index()
-            
-            # Bitcoin korelasyon analizi
-            btc_correlation = analyze_fng_btc_correlation()
-            
-            # Mesaj formatı
-            fear_message = format_fear_greed_message(fng_data, btc_correlation)
-            bot.send_message(message.chat.id, fear_message, parse_mode="Markdown")
-                
-        except Exception as e:
-            print(f"Korku endeksi hatası: {e}")
-            bot.send_message(message.chat.id, "❌ Korku endeksi alınamadı!")
-
-    @bot.message_handler(commands=['predict'])
-    def ai_prediction(message):
-        """AI ile fiyat tahmini"""
-        try:
-            parts = message.text.strip().split()
-            if len(parts) < 2:
-                bot.send_message(message.chat.id, 
-                    "🤖 **AI Fiyat Tahmini:**\n\n"
-                    "/predict COIN [DAYS]\n\n"
-                    "**Örnekler:**\n"
-                    "• /predict btc\n"
-                    "• /predict eth 7\n"
-                    "• /predict sol 30\n\n"
-                    "⚠️ **Bu tahmini yatırım tavsiyesi değil!**",
-                    parse_mode="Markdown")
-                return
-
-            coin_input = parts[1].lower()
-            days = int(parts[2]) if len(parts) > 2 else 7
-            days = min(days, 30)  # Maksimum 30 gün
-            
-            binance_symbol = find_binance_symbol(coin_input)
-            if not binance_symbol:
-                bot.send_message(message.chat.id, f"❌ '{coin_input.upper()}' bulunamadı!")
-                return
-
-            bot.send_message(message.chat.id, f"🤖 {binance_symbol} için AI tahmini oluşturuluyor...")
-            
-            # AI tahmini
-            prediction = generate_ai_prediction(binance_symbol, coin_input, days)
-            
-            if prediction:
-                bot.send_message(message.chat.id, prediction, parse_mode="Markdown")
-            else:
-                bot.send_message(message.chat.id, "❌ AI tahmini oluşturulamadı!")
-                
-        except Exception as e:
-            print(f"AI tahmin hatası: {e}")
-            bot.send_message(message.chat.id, "❌ AI tahmini yapılamadı!")
+            print(f"Analysis selection hatası: {e}")
+            bot.answer_callback_query(call.id, "❌ Analiz yapılamadı!")
 
 # =============================================================================
 # ANALİZ FONKSİYONLARI
 # =============================================================================
 
-async def analyze_single_timeframe(message, symbol, coin_input, timeframe):
-    """Tek timeframe analizi"""
+def perform_timeframe_analysis(message, symbol, coin_input, timeframe, bot):
+    """Timeframe analizi - 2 mesaj halinde"""
     try:
-        bot.send_message(message.chat.id, f"📊 {symbol} {timeframe} analiz ediliyor...")
-        
-        # Timeframe'e göre limit ayarla
+        # Veri al
         limit_map = {'1h': 168, '4h': 168, '1d': 100, '1w': 52}
         limit = limit_map.get(timeframe, 100)
         
@@ -205,25 +220,49 @@ async def analyze_single_timeframe(message, symbol, coin_input, timeframe):
             bot.send_message(message.chat.id, f"❌ {symbol} veri alınamadı!")
             return
 
-        # Kapsamlı analiz
+        # Kapsamlı teknik analiz
         analysis_result = perform_comprehensive_analysis(df, symbol, timeframe)
         
-        # Grafik oluştur
+        # AI yorumu oluştur
+        ai_commentary = generate_ai_trading_commentary(df, analysis_result, symbol, timeframe)
+        
+        # Trading önerileri
+        trading_recommendation = generate_trading_recommendation(analysis_result, df, symbol)
+        
+        # Destek/Direnç seviyeleri
+        support_resistance = calculate_support_resistance_levels(df)
+        
+        # 1. MESAJ: GRAFİK
         chart_img = create_advanced_chart(df, symbol, analysis_result, timeframe)
         
-        # Analiz mesajı
-        analysis_message = format_comprehensive_analysis_message(analysis_result, coin_input, timeframe)
-        
         if chart_img:
-            bot.send_photo(message.chat.id, chart_img, caption=analysis_message, parse_mode="Markdown")
-        else:
-            bot.send_message(message.chat.id, analysis_message, parse_mode="Markdown")
+            timeframe_names = {'1h': '1 Saat', '4h': '4 Saat', '1d': '1 Gün', '1w': '1 Hafta'}
+            tf_name = timeframe_names.get(timeframe, timeframe)
+            
+            bot.send_photo(
+                message.chat.id, 
+                chart_img, 
+                caption=f"📊 **{symbol} - {tf_name} Teknik Analiz Grafiği**",
+                parse_mode="Markdown"
+            )
+        
+        # 2. MESAJ: DETAYLI ANALİZ
+        analysis_message = format_detailed_analysis_message(
+            analysis_result, 
+            ai_commentary, 
+            trading_recommendation,
+            support_resistance,
+            coin_input, 
+            timeframe
+        )
+        
+        bot.send_message(message.chat.id, analysis_message, parse_mode="Markdown")
             
     except Exception as e:
         print(f"Timeframe analiz hatası: {e}")
-        bot.send_message(message.chat.id, "❌ Analiz yapılamadı!")
+        bot.send_message(message.chat.id, "❌ Analiz tamamlanamadı!")
 
-async def analyze_multiple_timeframes_command(message, symbol, coin_input):
+def perform_multi_timeframe_analysis(message, symbol, coin_input, bot):
     """Çoklu timeframe analizi"""
     try:
         bot.send_message(message.chat.id, f"📊 {symbol} çoklu timeframe analizi başlıyor...")
@@ -239,23 +278,53 @@ async def analyze_multiple_timeframes_command(message, symbol, coin_input):
         multi_tf_message = format_multi_timeframe_message(timeframe_results, coin_input)
         bot.send_message(message.chat.id, multi_tf_message, parse_mode="Markdown")
         
-        # En güçlü timeframe'i ayrıca göster
-        strongest_tf = find_strongest_timeframe(timeframe_results)
-        if strongest_tf:
-            bot.send_message(message.chat.id, 
-                f"🎯 **En güçlü sinyal {strongest_tf['timeframe']} timeframe'inde!**\n"
-                f"Skor: {strongest_tf['score']}/10")
-            
     except Exception as e:
         print(f"Multi timeframe hatası: {e}")
+        bot.send_message(message.chat.id, "❌ Çoklu timeframe analizi yapılamadı!")
 
-async def analyze_with_fibonacci(message, symbol, coin_input):
+def perform_ai_prediction(message, symbol, coin_input, bot):
+    """AI fiyat tahmini"""
+    try:
+        bot.send_message(message.chat.id, f"🤖 {symbol} AI tahmini oluşturuluyor...")
+        
+        # AI tahmini
+        prediction = generate_ai_prediction(symbol, coin_input, 7)
+        
+        if prediction:
+            bot.send_message(message.chat.id, prediction, parse_mode="Markdown")
+        else:
+            bot.send_message(message.chat.id, "❌ AI tahmini oluşturulamadı!")
+            
+    except Exception as e:
+        print(f"AI tahmin hatası: {e}")
+        bot.send_message(message.chat.id, "❌ AI tahmini yapılamadı!")
+
+def perform_signals_analysis(message, symbol, coin_input, bot):
+    """Trading sinyalleri analizi"""
+    try:
+        bot.send_message(message.chat.id, f"🎯 {symbol} sinyalleri analiz ediliyor...")
+        
+        # Multi-timeframe sinyal analizi
+        signals_analysis = generate_comprehensive_signals(symbol)
+        
+        if signals_analysis:
+            signals_message = format_signals_message(signals_analysis, coin_input)
+            bot.send_message(message.chat.id, signals_message, parse_mode="Markdown")
+        else:
+            bot.send_message(message.chat.id, "❌ Sinyal analizi yapılamadı!")
+            
+    except Exception as e:
+        print(f"Sinyal analizi hatası: {e}")
+        bot.send_message(message.chat.id, "❌ Sinyal analizi yapılamadı!")
+
+def perform_fibonacci_analysis(message, symbol, coin_input, bot):
     """Fibonacci analizi"""
     try:
         bot.send_message(message.chat.id, f"📐 {symbol} Fibonacci analizi...")
         
         df = get_binance_ohlc(symbol, interval="1d", limit=100)
         if df is None or df.empty:
+            bot.send_message(message.chat.id, "❌ Veri alınamadı!")
             return
 
         # Fibonacci seviyeleri
@@ -268,31 +337,366 @@ async def analyze_with_fibonacci(message, symbol, coin_input):
         
     except Exception as e:
         print(f"Fibonacci analiz hatası: {e}")
+        bot.send_message(message.chat.id, "❌ Fibonacci analizi yapılamadı!")
 
-async def analyze_with_ai(message, symbol, coin_input):
-    """AI ile analiz"""
+# =============================================================================
+# MESAJ FORMATLAMA FONKSİYONLARI
+# =============================================================================
+
+def format_detailed_analysis_message(analysis_result, ai_commentary, trading_rec, support_resistance, coin_input, timeframe):
+    """Detaylı analiz mesajı - 2. mesaj için"""
     try:
-        bot.send_message(message.chat.id, f"🤖 {symbol} AI analizi başlıyor...")
+        # Temel bilgiler
+        price = analysis_result['price']
+        rsi = analysis_result['rsi']
+        overall_score = analysis_result['overall_score']
         
-        # Teknik veri al
-        df = get_binance_ohlc(symbol, interval="1d", limit=100)
-        if df is None or df.empty:
-            return
-
-        # AI analizi
-        ai_analysis = generate_ai_analysis(df, symbol, coin_input)
-        
-        if ai_analysis:
-            bot.send_message(message.chat.id, ai_analysis, parse_mode="Markdown")
+        # Fiyat formatı
+        if price < 0.01:
+            price_str = f"${price:.8f}"
+        elif price < 1:
+            price_str = f"${price:.6f}"
         else:
-            bot.send_message(message.chat.id, "❌ AI analizi yapılamadı!")
-            
+            price_str = f"${price:,.4f}"
+        
+        # Timeframe adı
+        timeframe_names = {'1h': '1 Saat', '4h': '4 Saat', '1d': '1 Gün', '1w': '1 Hafta'}
+        tf_name = timeframe_names.get(timeframe, timeframe)
+        
+        mesaj = f"📊 **{coin_input.upper()} - {tf_name} Detay Analiz**\n\n"
+        
+        # === TEMel VERİLER ===
+        mesaj += f"💰 **Güncel Fiyat:** {price_str}\n"
+        mesaj += f"📈 **RSI:** {rsi:.1f} | **Teknik Skor:** {overall_score:.1f}/10\n\n"
+        
+        # === AI YORUMU ===
+        mesaj += f"🤖 **AI ANALİZİ**\n"
+        ai_clean = ai_commentary.replace("**", "").replace("📊", "").replace("💭", "").replace("🎯", "").replace("⚠️", "")
+        mesaj += f"{ai_clean[:200]}...\n\n"
+        
+        # === TRADİNG ÖNERİSİ ===
+        tr = trading_rec
+        mesaj += f"💼 **TRADİNG ÖNERİSİ**\n"
+        mesaj += f"{tr['emoji']} **Ben olsam:** {tr['action']}\n"
+        mesaj += f"📝 **Sebep:** {tr['reason']}\n"
+        mesaj += f"🎯 **Güven:** {tr['confidence']}\n\n"
+        
+        if tr['stop_loss'] and tr['take_profit']:
+            mesaj += f"**💡 Pozisyon Detayları:**\n"
+            mesaj += f"🟢 Entry: ${tr['entry_price']:.4f}\n"
+            mesaj += f"🔴 Stop: ${tr['stop_loss']:.4f}\n"
+            mesaj += f"🎯 Target: ${tr['take_profit']:.4f}\n"
+            mesaj += f"⚖️ R/R: {tr['risk_reward']:.1f}\n\n"
+        
+        # === DESTEK & DİRENÇ ===
+        sr = support_resistance
+        mesaj += f"📏 **DESTEK & DİRENÇ SEVİYELERİ**\n"
+        
+        if sr['resistance_levels']:
+            r1 = sr['resistance_levels'][0]
+            r_dist = ((r1 - price) / price) * 100
+            mesaj += f"🔴 **En yakın direnç:** ${r1:.4f} (+%{r_dist:.1f})\n"
+        
+        if sr['support_levels']:
+            s1 = sr['support_levels'][0]
+            s_dist = ((price - s1) / price) * 100
+            mesaj += f"🟢 **En yakın destek:** ${s1:.4f} (-%{s_dist:.1f})\n\n"
+        
+        # === TREND DURUMU ===
+        signals = analysis_result.get('signals', [])
+        buy_count = len([s for s in signals if s['type'] == 'BUY'])
+        sell_count = len([s for s in signals if s['type'] == 'SELL'])
+        
+        if buy_count > sell_count:
+            trend_status = "🐂 **BULLISH TREND**"
+            trend_desc = "Alıcılar kontrolde"
+        elif sell_count > buy_count:
+            trend_status = "🐻 **BEARISH TREND**"
+            trend_desc = "Satıcılar kontrolde"
+        else:
+            trend_status = "⚖️ **NEUTRAL TREND**"
+            trend_desc = "Belirsizlik hakim"
+        
+        mesaj += f"📈 **TREND ANALİZİ**\n"
+        mesaj += f"{trend_status}\n"
+        mesaj += f"📊 {trend_desc}\n"
+        mesaj += f"🎯 Alım: {buy_count} | Satım: {sell_count}\n\n"
+        
+        # === DİĞER KOMUTLAR ===
+        mesaj += f"🔧 **DİĞER ANALİZLER**\n"
+        mesaj += f"⏰ Alarm: /alarm {coin_input}\n"
+        mesaj += f"📊 Yeni analiz: /analiz {coin_input}\n\n"
+        
+        mesaj += f"⚠️ *Bu analiz yatırım tavsiyesi değildir!*"
+        
+        return mesaj
+        
     except Exception as e:
-        print(f"AI analiz hatası: {e}")
+        print(f"Detaylı mesaj formatla hatası: {e}")
+        return "❌ Analiz sonucu formatlanamadı!"
+
+def format_multi_timeframe_message(timeframe_results, coin_input):
+    """Çoklu timeframe mesajını formatla"""
+    try:
+        mesaj = f"📊 **{coin_input.upper()} - Çoklu Timeframe Analizi**\n\n"
+        
+        timeframes = ['1h', '4h', '1d', '1w']
+        timeframe_names = {'1h': '1 Saat', '4h': '4 Saat', '1d': '1 Gün', '1w': '1 Hafta'}
+        
+        for tf in timeframes:
+            if tf in timeframe_results:
+                result = timeframe_results[tf]
+                score = result.get('overall_score', 5)
+                trend = result.get('trend', 'NEUTRAL')
+                
+                # Emoji seçimi
+                if score >= 7:
+                    emoji = "🚀"
+                elif score >= 6:
+                    emoji = "📈"
+                elif score >= 4:
+                    emoji = "⚖️"
+                elif score >= 3:
+                    emoji = "📉"
+                else:
+                    emoji = "🔻"
+                
+                tf_name = timeframe_names.get(tf, tf)
+                mesaj += f"**{tf_name}:** {emoji} {score:.1f}/10 - {trend}\n"
+        
+        # Genel değerlendirme
+        scores = [r.get('overall_score', 5) for r in timeframe_results.values()]
+        avg_score = sum(scores) / len(scores) if scores else 5
+        
+        if avg_score >= 7:
+            overall = "🚀 **Güçlü Boğa Trendi**"
+        elif avg_score >= 6:
+            overall = "📈 **Boğa Trendi**"
+        elif avg_score >= 4:
+            overall = "⚖️ **Nötr/Kararsız**"
+        elif avg_score >= 3:
+            overall = "📉 **Ayı Trendi**"
+        else:
+            overall = "🔻 **Güçlü Ayı Trendi**"
+        
+        mesaj += f"\n📊 **Genel Değerlendirme**\n"
+        mesaj += f"{overall}\n"
+        mesaj += f"🎯 **Ortalama Skor:** {avg_score:.1f}/10\n\n"
+        
+        mesaj += f"💡 **Detay analiz:** /analiz {coin_input}\n"
+        mesaj += f"⚠️ *Yatırım tavsiyesi değildir!*"
+        
+        return mesaj
+    except Exception as e:
+        print(f"Multi TF mesaj hatası: {e}")
+        return "❌ Çoklu timeframe sonucu formatlanamadı!"
+
+def format_fibonacci_message(fib_levels, current_price, coin_input):
+    """Fibonacci mesajını formatla"""
+    try:
+        mesaj = f"📐 **{coin_input.upper()} - Fibonacci Retracement**\n\n"
+        
+        # Mevcut fiyat formatı
+        if current_price < 0.01:
+            current_str = f"${current_price:.8f}"
+        elif current_price < 1:
+            current_str = f"${current_price:.6f}"
+        else:
+            current_str = f"${current_price:,.4f}"
+        
+        mesaj += f"💰 **Güncel Fiyat:** {current_str}\n\n"
+        
+        # Fibonacci seviyeleri
+        mesaj += f"📏 **Fibonacci Seviyeleri:**\n"
+        
+        for level, price in fib_levels.items():
+            if current_price > price:
+                emoji = "🟢"  # Destek
+                role = "Destek"
+            else:
+                emoji = "🔴"  # Direnç
+                role = "Direnç"
+            
+            distance = abs((current_price - price) / current_price * 100)
+            
+            if price < 0.01:
+                price_str = f"${price:.8f}"
+            elif price < 1:
+                price_str = f"${price:.6f}"
+            else:
+                price_str = f"${price:,.4f}"
+            
+            mesaj += f"{emoji} **{level}:** {price_str} ({role}, %{distance:.1f})\n"
+        
+        mesaj += f"\n💡 **Nasıl Kullanılır:**\n"
+        mesaj += f"🟢 Yeşil seviyeler potansiyel destek\n"
+        mesaj += f"🔴 Kırmızı seviyeler potansiyel direnç\n"
+        mesaj += f"📊 %23.6, %38.2, %61.8 güçlü seviyeler\n\n"
+        
+        mesaj += f"⏰ **Alarm kur:** /alarm {coin_input}\n"
+        mesaj += f"⚠️ *Yatırım tavsiyesi değildir!*"
+        
+        return mesaj
+    except Exception as e:
+        print(f"Fibonacci mesaj hatası: {e}")
+        return "❌ Fibonacci analizi formatlanamadı!"
 
 # =============================================================================
-# KAPSAMLI ANALİZ FONKSİYONU
+# TEKNİK ANALİZ FONKSİYONLARI - İMPORT EDİLMİŞ
 # =============================================================================
+
+# Diğer gerekli import edilmiş fonksiyonlar
+from utils.technical_analysis import (
+    calculate_rsi, calculate_macd, calculate_bollinger_bands
+)
+
+# Eksik fonksiyonları burada tanımla (önceki koddaki gibi)
+def calculate_stochastic(df, k_period=14, d_period=3):
+    """Stochastic Oscillator hesapla"""
+    try:
+        high_max = df['high'].rolling(window=k_period).max()
+        low_min = df['low'].rolling(window=k_period).min()
+        
+        k_percent = ((df['close'] - low_min) / (high_max - low_min)) * 100
+        d_percent = k_percent.rolling(window=d_period).mean()
+        
+        return {
+            'k_percent': k_percent,
+            'd_percent': d_percent
+        }
+    except Exception as e:
+        print(f"Stochastic hesaplama hatası: {e}")
+        return {
+            'k_percent': pd.Series(index=df.index, dtype=float),
+            'd_percent': pd.Series(index=df.index, dtype=float)
+        }
+
+def calculate_fibonacci_levels(df, lookback=50):
+    """Fibonacci Retracement Levels hesapla"""
+    try:
+        recent_data = df.tail(lookback)
+        high_price = recent_data['high'].max()
+        low_price = recent_data['low'].min()
+        
+        diff = high_price - low_price
+        
+        fib_levels = {
+            '0%': high_price,
+            '23.6%': high_price - (diff * 0.236),
+            '38.2%': high_price - (diff * 0.382),
+            '50%': high_price - (diff * 0.5),
+            '61.8%': high_price - (diff * 0.618),
+            '78.6%': high_price - (diff * 0.786),
+            '100%': low_price
+        }
+        
+        return fib_levels
+    except Exception as e:
+        print(f"Fibonacci hesaplama hatası: {e}")
+        return {}
+
+def calculate_ichimoku(df):
+    """Ichimoku Cloud hesapla"""
+    try:
+        # Conversion Line (Tenkan-sen)
+        high_9 = df['high'].rolling(window=9).max()
+        low_9 = df['low'].rolling(window=9).min()
+        conversion_line = (high_9 + low_9) / 2
+        
+        # Base Line (Kijun-sen)
+        high_26 = df['high'].rolling(window=26).max()
+        low_26 = df['low'].rolling(window=26).min()
+        base_line = (high_26 + low_26) / 2
+        
+        return {
+            'conversion_line': conversion_line,
+            'base_line': base_line
+        }
+    except Exception as e:
+        print(f"Ichimoku hesaplama hatası: {e}")
+        return {}
+
+def calculate_signal_strength(df, rsi, macd_data, bb_data, stoch_data):
+    """Her sinyal için güç skoru (1-10) hesapla"""
+    try:
+        signals = []
+        current_price = df['close'].iloc[-1]
+        
+        # RSI Sinyali
+        if rsi < 30:
+            strength = min(10, (30 - rsi) / 3)
+            signals.append({
+                'type': 'BUY',
+                'indicator': 'RSI',
+                'reason': f'Aşırı satım (RSI: {rsi:.1f})',
+                'strength': round(strength),
+                'confidence': 'Yüksek' if strength >= 7 else 'Orta' if strength >= 5 else 'Düşük'
+            })
+        elif rsi > 70:
+            strength = min(10, (rsi - 70) / 3)
+            signals.append({
+                'type': 'SELL',
+                'indicator': 'RSI',
+                'reason': f'Aşırı alım (RSI: {rsi:.1f})',
+                'strength': round(strength),
+                'confidence': 'Yüksek' if strength >= 7 else 'Orta' if strength >= 5 else 'Düşük'
+            })
+        
+        # MACD Sinyali
+        try:
+            macd_current = macd_data['macd'].iloc[-1]
+            macd_signal = macd_data['signal'].iloc[-1]
+            macd_prev = macd_data['macd'].iloc[-2]
+            signal_prev = macd_data['signal'].iloc[-2]
+            
+            # MACD crossover
+            if macd_current > macd_signal and macd_prev <= signal_prev:
+                signals.append({
+                    'type': 'BUY',
+                    'indicator': 'MACD',
+                    'reason': 'MACD pozitif kesişim',
+                    'strength': 7,
+                    'confidence': 'Yüksek'
+                })
+            elif macd_current < macd_signal and macd_prev >= signal_prev:
+                signals.append({
+                    'type': 'SELL',
+                    'indicator': 'MACD',
+                    'reason': 'MACD negatif kesişim',
+                    'strength': 7,
+                    'confidence': 'Yüksek'
+                })
+        except:
+            pass
+        
+        # Bollinger Bands Sinyali
+        try:
+            bb_upper = bb_data['upper'].iloc[-1]
+            bb_lower = bb_data['lower'].iloc[-1]
+            
+            if current_price <= bb_lower:
+                signals.append({
+                    'type': 'BUY',
+                    'indicator': 'Bollinger',
+                    'reason': 'Alt band test',
+                    'strength': 6,
+                    'confidence': 'Orta'
+                })
+            elif current_price >= bb_upper:
+                signals.append({
+                    'type': 'SELL',
+                    'indicator': 'Bollinger',
+                    'reason': 'Üst band test',
+                    'strength': 6,
+                    'confidence': 'Orta'
+                })
+        except:
+            pass
+        
+        return signals
+    except Exception as e:
+        print(f"Sinyal gücü hesaplama hatası: {e}")
+        return []
 
 def perform_comprehensive_analysis(df, symbol, timeframe):
     """Kapsamlı teknik analiz"""
@@ -345,288 +749,39 @@ def perform_comprehensive_analysis(df, symbol, timeframe):
         print(f"Kapsamlı analiz hatası: {e}")
         return {}
 
-# =============================================================================
-# AI TAHMİN FONKSİYONLARI
-# =============================================================================
-
-def generate_ai_prediction(symbol, coin_input, days):
-    """OpenAI ile fiyat tahmini"""
+def calculate_entry_exit_points(df, current_price, bb_data, signals):
+    """Net entry/exit noktaları hesapla"""
     try:
-        if not OPENAI_API_KEY or OPENAI_API_KEY == "BURAYA_OPENAI_KEYINI_YAZ":
-            return "🤖 **AI tahmini için OpenAI API key gerekli!**\n\nconfig.py'de OPENAI_API_KEY'i ayarlayın."
+        buy_signals = [s for s in signals if s['type'] == 'BUY']
+        sell_signals = [s for s in signals if s['type'] == 'SELL']
         
-        # Veri topla
-        df = get_binance_ohlc(symbol, interval="1d", limit=60)
-        if df is None or df.empty:
-            return None
+        buy_strength = sum(s['strength'] for s in buy_signals)
+        sell_strength = sum(s['strength'] for s in sell_signals)
         
-        # Teknik indikatörleri hesapla
-        current_price = df['close'].iloc[-1]
-        rsi = calculate_rsi(df['close']).iloc[-1]
-        macd_data = calculate_macd(df['close'])
+        entry_exit_points = {
+            'current_price': current_price,
+            'action': 'BUY' if buy_strength > sell_strength else 'SELL' if sell_strength > buy_strength else 'HOLD',
+            'confidence': abs(buy_strength - sell_strength),
+            'entry_points': [],
+            'stop_loss': current_price * 0.95,
+            'take_profit': current_price * 1.05
+        }
         
-        # AI için prompt hazırla
-        prompt = create_ai_prediction_prompt(df, symbol, current_price, rsi, macd_data, days)
-        
-        # OpenAI API çağrısı
-        client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "Sen profesyonel bir kripto analisti ve trader'sın. Teknik analiz ve piyasa verilerine dayanarak objektif tahminler yaparsın."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=500,
-            temperature=0.7
-        )
-        
-        ai_response = response.choices[0].message.content
-        
-        # AI cevabını formatla
-        formatted_response = f"🤖 **AI Fiyat Tahmini - {symbol}**\n\n"
-        formatted_response += f"📊 **Güncel Fiyat:** ${current_price:,.4f}\n"
-        formatted_response += f"📅 **Tahmin Süresi:** {days} gün\n\n"
-        formatted_response += ai_response
-        formatted_response += f"\n\n⚠️ **Uyarı:** Bu tahmin yatırım tavsiyesi değildir!"
-        
-        return formatted_response
-        
+        return entry_exit_points
     except Exception as e:
-        print(f"AI tahmin hatası: {e}")
-        return None
-
-def create_ai_prediction_prompt(df, symbol, current_price, rsi, macd_data, days):
-    """AI için prompt oluştur"""
-    try:
-        # Son 7 günlük değişim
-        price_change_7d = ((current_price - df['close'].iloc[-8]) / df['close'].iloc[-8]) * 100
-        
-        # Volume trendi
-        avg_volume = df['volume'].tail(20).mean()
-        recent_volume = df['volume'].tail(3).mean()
-        volume_trend = "Artış" if recent_volume > avg_volume else "Azalış"
-        
-        # MACD durumu
-        macd_signal = "Bullish" if macd_data['macd'].iloc[-1] > macd_data['signal'].iloc[-1] else "Bearish"
-        
-        prompt = f"""
-{symbol} için {days} günlük fiyat tahmini yap.
-
-Mevcut Veriler:
-- Güncel Fiyat: ${current_price:,.4f}
-- 7 Günlük Değişim: %{price_change_7d:.2f}
-- RSI: {rsi:.1f}
-- MACD: {macd_signal}
-- Volume Trendi: {volume_trend}
-
-Aşağıdaki formatta tahmin ver:
-1. Fiyat hedefi (min-max aralığı)
-2. Olasılık yüzdesi
-3. Ana gerekçeler (3 madde)
-4. Risk faktörleri
-5. Önemli seviyeler
-
-Objektif ve açıklayıcı ol. Kesin tahmin vermek yerine olasılık aralıkları kullan.
-"""
-        return prompt
-    except:
-        return f"{symbol} için {days} günlük teknik analiz bazlı fiyat tahmini yap."
-
-def generate_ai_analysis(df, symbol, coin_input):
-    """AI ile genel analiz"""
-    try:
-        if not OPENAI_API_KEY or OPENAI_API_KEY == "BURAYA_OPENAI_KEYINI_YAZ":
-            return "🤖 **AI analizi için OpenAI API key gerekli!**"
-        
-        # Teknik veriler
-        current_price = df['close'].iloc[-1]
-        rsi = calculate_rsi(df['close']).iloc[-1]
-        
-        # Basit AI analizi
-        prompt = f"Kripto para {symbol} için teknik analiz yap. Güncel fiyat: ${current_price:.4f}, RSI: {rsi:.1f}. Kısa ve net analiz ver."
-        
-        client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=300
-        )
-        
-        return f"🤖 **AI Analizi - {symbol}**\n\n{response.choices[0].message.content}"
-        
-    except Exception as e:
-        print(f"AI genel analiz hatası: {e}")
-        return None
-
-# =============================================================================
-# MESAJ FORMATLAMA FONKSİYONLARI
-# =============================================================================
-
-def format_comprehensive_analysis_message(analysis, coin_input, timeframe):
-    """Kapsamlı analiz mesajını formatla"""
-    try:
-        price = analysis['price']
-        rsi = analysis['rsi']
-        signals = analysis['signals']
-        entry_exit = analysis['entry_exit']
-        overall_score = analysis['overall_score']
-        recommendation = analysis['recommendation']
-        
-        # Fiyat formatı
-        if price < 0.01:
-            price_str = f"${price:.8f}"
-        elif price < 1:
-            price_str = f"${price:.6f}"
-        else:
-            price_str = f"${price:,.4f}"
-        
-        mesaj = f"📊 **Gelişmiş Analiz - {timeframe.upper()}**\n\n"
-        mesaj += f"💰 **Fiyat:** {price_str}\n"
-        mesaj += f"🎯 **RSI:** {rsi:.1f}\n"
-        mesaj += f"⭐ **Genel Skor:** {overall_score:.1f}/10\n"
-        mesaj += f"💡 **Öneri:** {recommendation}\n\n"
-        
-        # En güçlü sinyaller
-        if signals:
-            strong_signals = [s for s in signals if s['strength'] >= 6]
-            if strong_signals:
-                mesaj += f"🎯 **Güçlü Sinyaller:**\n"
-                for signal in strong_signals[:3]:
-                    mesaj += f"• {signal['type']}: {signal['reason']} (Güç: {signal['strength']}/10)\n"
-                mesaj += "\n"
-        
-        # Entry/Exit noktaları
-        if entry_exit and entry_exit.get('action') != 'HOLD':
-            action = entry_exit['action']
-            confidence = entry_exit['confidence']
-            
-            mesaj += f"🎯 **Trading Önerisi:** {action}\n"
-            mesaj += f"📊 **Güven:** {confidence:.1f}/10\n"
-            
-            if action == 'BUY' and entry_exit.get('entry_points'):
-                mesaj += f"🟢 **Entry:** ${entry_exit['entry_points'][0]['price']:.4f}\n"
-                mesaj += f"🔴 **Stop Loss:** ${entry_exit['stop_loss']:.4f}\n"
-                mesaj += f"🎯 **Take Profit:** ${entry_exit['take_profit']:.4f}\n"
-            
-            mesaj += "\n"
-        
-        mesaj += f"⏰ **Alarm:** /alarm {coin_input}\n"
-        mesaj += f"🤖 **AI Tahmin:** /predict {coin_input}\n"
-        mesaj += f"📊 **Çoklu TF:** /analiz {coin_input} multi"
-        
-        return mesaj
-    except Exception as e:
-        print(f"Mesaj formatla hatası: {e}")
-        return "❌ Analiz sonucu formatlanamadı!"
-
-def format_multi_timeframe_message(timeframe_results, coin_input):
-    """Çoklu timeframe mesajını formatla"""
-    try:
-        mesaj = f"📊 **Çoklu Timeframe Analizi**\n\n"
-        
-        timeframes = ['1h', '4h', '1d', '1w']
-        for tf in timeframes:
-            if tf in timeframe_results:
-                result = timeframe_results[tf]
-                score = result.get('overall_score', 5)
-                trend = result.get('trend', 'NEUTRAL')
-                
-                # Emoji seçimi
-                if score >= 7:
-                    emoji = "🚀"
-                elif score >= 6:
-                    emoji = "📈"
-                elif score >= 4:
-                    emoji = "⚖️"
-                elif score >= 3:
-                    emoji = "📉"
-                else:
-                    emoji = "🔻"
-                
-                mesaj += f"**{tf.upper()}:** {emoji} {score:.1f}/10 - {trend}\n"
-        
-        # Genel değerlendirme
-        avg_score = sum(r.get('overall_score', 5) for r in timeframe_results.values()) / len(timeframe_results)
-        
-        if avg_score >= 7:
-            overall = "🚀 Güçlü Boğa"
-        elif avg_score >= 6:
-            overall = "📈 Boğa"
-        elif avg_score >= 4:
-            overall = "⚖️ Nötr"
-        elif avg_score >= 3:
-            overall = "📉 Ayı"
-        else:
-            overall = "🔻 Güçlü Ayı"
-        
-        mesaj += f"\n📊 **Genel Durum:** {overall} ({avg_score:.1f}/10)\n\n"
-        mesaj += f"🎯 **Detay analiz:** /analiz {coin_input} 4h\n"
-        mesaj += f"🤖 **AI görüşü:** /analiz {coin_input} ai"
-        
-        return mesaj
-    except Exception as e:
-        print(f"Multi TF mesaj hatası: {e}")
-        return "❌ Çoklu timeframe sonucu formatlanamadı!"
-
-def format_fibonacci_message(fib_levels, current_price, coin_input):
-    """Fibonacci mesajını formatla"""
-    try:
-        mesaj = f"📐 **Fibonacci Retracement Seviyeleri**\n\n"
-        
-        # Mevcut fiyatın hangi seviyede olduğunu bul
-        current_level = None
-        for level, price in fib_levels.items():
-            if abs(current_price - price) / current_price < 0.02:  # %2 tolerans
-                current_level = level
-                break
-        
-        mesaj += f"💰 **Güncel Fiyat:** ${current_price:.4f}"
-        if current_level:
-            mesaj += f" *({current_level} yakınında)*"
-        mesaj += "\n\n"
-        
-        for level, price in fib_levels.items():
-            if current_price > price:
-                emoji = "🟢"  # Destek
-                role = "Destek"
-            else:
-                emoji = "🔴"  # Direnç
-                role = "Direnç"
-            
-            distance = abs((current_price - price) / current_price * 100)
-            mesaj += f"{emoji} **{level}:** ${price:.4f} ({role}, %{distance:.1f})\n"
-        
-        mesaj += f"\n💡 **Kullanım:**\n"
-        mesaj += f"• Yeşil seviyeler: Potansiyel destek\n"
-        mesaj += f"• Kırmızı seviyeler: Potansiyel direnç\n\n"
-        mesaj += f"⏰ **Alarm kur:** /alarm {coin_input}"
-        
-        return mesaj
-    except Exception as e:
-        print(f"Fibonacci mesaj hatası: {e}")
-        return "❌ Fibonacci analizi formatlanamadı!"
-
-# =============================================================================
-# YARDIMCI FONKSİYONLAR
-# =============================================================================
+        print(f"Entry/Exit hesaplama hatası: {e}")
+        return {}
 
 def calculate_comprehensive_score(signals, trend_strength, risk_analysis):
     """Kapsamlı skor hesapla"""
     try:
-        # Sinyal skorları
         signal_score = sum(s['strength'] for s in signals if s['type'] == 'BUY') - sum(s['strength'] for s in signals if s['type'] == 'SELL')
         signal_score = max(-10, min(10, signal_score))
         
-        # Trend skoru
         trend_score = trend_strength.get('score', 0)
-        
-        # Risk skoru (düşük risk = yüksek skor)
         risk_score = 10 - risk_analysis.get('risk_level', 5)
         
-        # Ağırlıklı ortalama
         weighted_score = (signal_score * 0.4 + trend_score * 0.4 + risk_score * 0.2)
-        
-        # 0-10 arasına normalize et
         normalized_score = (weighted_score + 10) / 2
         
         return max(0, min(10, normalized_score))
@@ -636,7 +791,6 @@ def calculate_comprehensive_score(signals, trend_strength, risk_analysis):
 def get_comprehensive_recommendation(score, signals):
     """Kapsamlı öneri ver"""
     try:
-        # Sinyal sayıları
         buy_signals = len([s for s in signals if s['type'] == 'BUY'])
         sell_signals = len([s for s in signals if s['type'] == 'SELL'])
         
@@ -645,10 +799,7 @@ def get_comprehensive_recommendation(score, signals):
         elif score >= 7:
             return "📈 AL"
         elif score >= 6:
-            if buy_signals > sell_signals:
-                return "📈 ZAYIF AL"
-            else:
-                return "⚖️ BEKLE"
+            return "📈 ZAYIF AL" if buy_signals > sell_signals else "⚖️ BEKLE"
         elif score >= 4:
             return "⚖️ BEKLE"
         elif score >= 3:
@@ -665,13 +816,11 @@ def calculate_trend_strength_advanced(df):
     try:
         current_price = df['close'].iloc[-1]
         
-        # Çoklu SMA
         sma_5 = df['close'].rolling(5).mean().iloc[-1]
         sma_10 = df['close'].rolling(10).mean().iloc[-1]
         sma_20 = df['close'].rolling(20).mean().iloc[-1]
         sma_50 = df['close'].rolling(50).mean().iloc[-1]
         
-        # Trend puanı
         trend_score = 0
         if current_price > sma_5: trend_score += 2
         if current_price > sma_10: trend_score += 2
@@ -680,7 +829,6 @@ def calculate_trend_strength_advanced(df):
         if sma_5 > sma_10: trend_score += 1
         if sma_10 > sma_20: trend_score += 1
         
-        # Momentum
         momentum = ((current_price - df['close'].iloc[-10]) / df['close'].iloc[-10]) * 100
         
         return {
@@ -695,25 +843,21 @@ def calculate_trend_strength_advanced(df):
 def calculate_risk_metrics(df, signals):
     """Risk metriklerini hesapla"""
     try:
-        # Volatilite
         returns = df['close'].pct_change().dropna()
         volatility = returns.std() * 100
         
-        # Maksimum düşüş
         rolling_max = df['close'].expanding().max()
         drawdown = (df['close'] - rolling_max) / rolling_max * 100
         max_drawdown = abs(drawdown.min())
         
-        # Sinyal tutarlılığı
         signal_consistency = len([s for s in signals if s['confidence'] == 'Yüksek']) / max(len(signals), 1)
         
-        # Risk seviyesi
         if volatility > 8 or max_drawdown > 20:
-            risk_level = 8  # Yüksek risk
+            risk_level = 8
         elif volatility > 5 or max_drawdown > 10:
-            risk_level = 6  # Orta risk
+            risk_level = 6
         else:
-            risk_level = 3  # Düşük risk
+            risk_level = 3
         
         return {
             'volatility': volatility,
@@ -725,274 +869,250 @@ def calculate_risk_metrics(df, signals):
     except:
         return {'volatility': 5, 'max_drawdown': 10, 'risk_level': 5, 'signal_consistency': 0.5, 'risk_description': 'Orta'}
 
-def generate_comprehensive_signals(symbol):
-    """Kapsamlı sinyal analizi"""
+def generate_ai_trading_commentary(df, analysis_result, symbol, timeframe):
+    """AI ile trading yorumu oluştur"""
     try:
-        # Çoklu timeframe sinyalleri
-        timeframes = ['1h', '4h', '1d']
-        all_signals = []
+        if not OPENAI_API_KEY or OPENAI_API_KEY == "BURAYA_OPENAI_KEYINI_YAZ":
+            return "🤖 AI yorumu için OpenAI API key gerekli!"
         
-        for tf in timeframes:
-            df = get_binance_ohlc(symbol, interval=tf, limit=100)
-            if df is not None and not df.empty:
-                analysis = perform_single_timeframe_analysis(df)
-                if analysis and analysis.get('signals'):
-                    for signal in analysis['signals']:
-                        signal['timeframe'] = tf
-                        all_signals.append(signal)
+        current_price = df['close'].iloc[-1]
+        rsi = analysis_result.get('rsi', 50)
+        overall_score = analysis_result.get('overall_score', 5)
         
-        # Sinyalleri grupla ve güçlendir
-        consolidated_signals = consolidate_signals(all_signals)
+        prompt = f"""
+Sen profesyonel kripto trading analisti sin. {symbol} için {timeframe} analizi:
+
+Veriler:
+- Fiyat: ${current_price:,.4f}
+- RSI: {rsi:.1f}
+- Skor: {overall_score:.1f}/10
+
+Kısa yorumuyla:
+📊 Teknik Durum: (Bullish/Bearish/Nötr)
+💭 Yorum: (2 cümle analiz)
+🎯 Beklenti: (kısa vadeli)
+⚠️ Risk: (ana risk)
+
+Kısa ve net ol, max 150 kelime.
+"""
+
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Sen uzman kripto analisti sin. Kısa ve pratik yorumlar yaparsın."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=200,
+            temperature=0.7
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        print(f"AI yorum hatası: {e}")
+        score = analysis_result.get('overall_score', 5)
+        if score >= 7:
+            return "📊 Teknik Durum: Bullish\n💭 Güçlü alım sinyalleri görülüyor\n🎯 Beklenti: Yükselişe devam\n⚠️ Risk: Aşırı alım riski"
+        elif score <= 3:
+            return "📊 Teknik Durum: Bearish\n💭 Satış baskısı ağır basıyor\n🎯 Beklenti: Düşüş beklenebilir\n⚠️ Risk: Momentum kaybı"
+        else:
+            return "📊 Teknik Durum: Nötr\n💭 Kararsızlık hakim durumda\n🎯 Beklenti: Beklemede kalın\n⚠️ Risk: Yön belirsizliği"
+
+def generate_trading_recommendation(analysis_result, df, symbol):
+    """Trading önerisi oluştur"""
+    try:
+        current_price = df['close'].iloc[-1]
+        signals = analysis_result.get('signals', [])
+        overall_score = analysis_result.get('overall_score', 5)
+        
+        strong_buy_signals = len([s for s in signals if s['type'] == 'BUY' and s['strength'] >= 7])
+        strong_sell_signals = len([s for s in signals if s['type'] == 'SELL' and s['strength'] >= 7])
+        
+        if overall_score >= 8 and strong_buy_signals > 0:
+            action = "LONG AÇ"
+            reason = f"{strong_buy_signals} güçlü alım sinyali"
+            confidence = "Yüksek"
+            emoji = "🚀"
+        elif overall_score >= 6.5:
+            action = "DİKKATLİ LONG"
+            reason = "Orta güçlü sinyaller"
+            confidence = "Orta"
+            emoji = "📈"
+        elif overall_score <= 2 and strong_sell_signals > 0:
+            action = "SHORT AÇ"
+            reason = f"{strong_sell_signals} güçlü satış sinyali"
+            confidence = "Yüksek"
+            emoji = "📉"
+        elif overall_score <= 3.5:
+            action = "DİKKATLİ SHORT"
+            reason = "Zayıflık sinyalleri"
+            confidence = "Orta"
+            emoji = "🔻"
+        else:
+            action = "BEKLE"
+            reason = "Karışık sinyaller"
+            confidence = "Düşük"
+            emoji = "⚖️"
+        
+        if "LONG" in action:
+            entry_price = current_price
+            stop_loss = current_price * 0.97
+            take_profit = current_price * 1.06
+            risk_reward = (take_profit - entry_price) / (entry_price - stop_loss)
+        elif "SHORT" in action:
+            entry_price = current_price
+            stop_loss = current_price * 1.03
+            take_profit = current_price * 0.94
+            risk_reward = (entry_price - take_profit) / (stop_loss - entry_price)
+        else:
+            entry_price = current_price
+            stop_loss = None
+            take_profit = None
+            risk_reward = 0
         
         return {
-            'symbol': symbol,
-            'signals': consolidated_signals,
-            'signal_count': len(consolidated_signals),
-            'bullish_strength': sum(s['strength'] for s in consolidated_signals if s['type'] == 'BUY'),
-            'bearish_strength': sum(s['strength'] for s in consolidated_signals if s['type'] == 'SELL')
+            'action': action,
+            'emoji': emoji,
+            'reason': reason,
+            'confidence': confidence,
+            'entry_price': entry_price,
+            'stop_loss': stop_loss,
+            'take_profit': take_profit,
+            'risk_reward': risk_reward
         }
+        
     except Exception as e:
-        print(f"Kapsamlı sinyal hatası: {e}")
-        return None
+        print(f"Trading öneri hatası: {e}")
+        return {
+            'action': 'BEKLE',
+            'emoji': '⚖️',
+            'reason': 'Analiz tamamlanamadı',
+            'confidence': 'Düşük',
+            'entry_price': df['close'].iloc[-1],
+            'stop_loss': None,
+            'take_profit': None,
+            'risk_reward': 0
+        }
 
-def consolidate_signals(signals):
-    """Sinyalleri birleştir ve güçlendir"""
-    try:
-        # Aynı tip sinyalleri grupla
-        signal_groups = {}
-        
-        for signal in signals:
-            key = f"{signal['type']}_{signal['indicator']}"
-            if key not in signal_groups:
-                signal_groups[key] = []
-            signal_groups[key].append(signal)
-        
-        # Her grup için en güçlü sinyali al
-        consolidated = []
-        for group_signals in signal_groups.values():
-            if len(group_signals) > 1:
-                # Çoklu timeframe destekli sinyal - güçlendir
-                strongest = max(group_signals, key=lambda x: x['strength'])
-                strongest['strength'] = min(10, strongest['strength'] + len(group_signals) - 1)
-                strongest['reason'] += f" (Multi-TF)"
-                consolidated.append(strongest)
-            else:
-                consolidated.append(group_signals[0])
-        
-        return sorted(consolidated, key=lambda x: x['strength'], reverse=True)
-    except:
-        return signals
-
-def analyze_breakout_candidates_advanced():
-    """Gelişmiş breakout analizi"""
-    try:
-        candidates = ["btc", "eth", "sol", "ada", "matic", "dot", "avax", "link", "uni", "atom"]
-        results = []
-        
-        for coin in candidates:
-            binance_symbol = find_binance_symbol(coin)
-            if not binance_symbol:
-                continue
-            
-            df = get_binance_ohlc(binance_symbol, interval="1d", limit=100)
-            if df is None or df.empty:
-                continue
-            
-            # Gelişmiş breakout skoru
-            breakout_analysis = calculate_advanced_breakout_score(df, binance_symbol)
-            
-            if breakout_analysis['score'] >= 6:
-                results.append({
-                    'symbol': binance_symbol,
-                    'coin': coin.upper(),
-                    'score': breakout_analysis['score'],
-                    'reasons': breakout_analysis['reasons'],
-                    'probability': breakout_analysis['probability'],
-                    'target': breakout_analysis['target'],
-                    'risk_reward': breakout_analysis['risk_reward']
-                })
-        
-        return sorted(results, key=lambda x: x['score'], reverse=True)[:6]
-    except Exception as e:
-        print(f"Gelişmiş breakout hatası: {e}")
-        return []
-
-def calculate_advanced_breakout_score(df, symbol):
-    """Gelişmiş breakout skoru"""
+def calculate_support_resistance_levels(df):
+    """Destek ve direnç seviyelerini hesapla"""
     try:
         current_price = df['close'].iloc[-1]
         
-        # Temel skorlama
-        analysis = perform_single_timeframe_analysis(df)
-        base_score = analysis.get('overall_score', 5)
+        highs = []
+        lows = []
+        window = 5
         
-        # Breakout faktörleri
-        breakout_factors = []
-        additional_score = 0
+        for i in range(window, len(df) - window):
+            if all(df['high'].iloc[i] >= df['high'].iloc[i-j] for j in range(1, window+1)) and \
+               all(df['high'].iloc[i] >= df['high'].iloc[i+j] for j in range(1, window+1)):
+                highs.append(df['high'].iloc[i])
+            
+            if all(df['low'].iloc[i] <= df['low'].iloc[i-j] for j in range(1, window+1)) and \
+               all(df['low'].iloc[i] <= df['low'].iloc[i+j] for j in range(1, window+1)):
+                lows.append(df['low'].iloc[i])
         
-        # Volume artışı
-        avg_volume = df['volume'].tail(20).mean()
-        recent_volume = df['volume'].tail(3).mean()
-        volume_ratio = recent_volume / avg_volume
+        resistance_levels = [r for r in highs if r > current_price]
+        support_levels = [s for s in lows if s < current_price]
         
-        if volume_ratio > 1.5:
-            additional_score += 2
-            breakout_factors.append(f"Hacim artışı ({volume_ratio:.1f}x)")
-        
-        # Bollinger sıkışması
-        bb_data = calculate_bollinger_bands(df['close'])
-        bb_width = (bb_data['upper'].iloc[-1] - bb_data['lower'].iloc[-1]) / bb_data['middle'].iloc[-1]
-        bb_avg_width = ((bb_data['upper'] - bb_data['lower']) / bb_data['middle']).tail(20).mean()
-        
-        if bb_width < bb_avg_width * 0.8:
-            additional_score += 1.5
-            breakout_factors.append("Bollinger sıkışması")
-        
-        # Direnç testi
-        resistance_levels = find_resistance_levels(df, current_price)
-        if resistance_levels:
-            distance_to_resistance = (resistance_levels[0] - current_price) / current_price * 100
-            if 0 < distance_to_resistance < 3:
-                additional_score += 2
-                breakout_factors.append("Direnç testinde")
-        
-        # RSI momentum
-        rsi = calculate_rsi(df['close']).iloc[-1]
-        if 50 < rsi < 65:
-            additional_score += 1
-            breakout_factors.append("RSI momentum")
-        
-        total_score = min(10, base_score + additional_score)
-        
-        # Hedef ve olasılık hesapla
-        target_percentage = min(total_score * 2, 15)
-        probability = min(total_score * 8, 80)
-        
-        # Risk/Reward
-        support_levels = find_support_levels(df, current_price)
-        stop_loss = support_levels[0] if support_levels else current_price * 0.95
-        target_price = current_price * (1 + target_percentage / 100)
-        
-        risk = (current_price - stop_loss) / current_price * 100
-        reward = target_percentage
-        risk_reward = reward / max(risk, 1)
+        resistance_levels = sorted(resistance_levels)[:3]
+        support_levels = sorted(support_levels, reverse=True)[:3]
         
         return {
-            'score': round(total_score, 1),
-            'reasons': breakout_factors[:3],
-            'probability': round(probability),
-            'target': round(target_percentage, 1),
-            'risk_reward': round(risk_reward, 1)
+            'support_levels': support_levels,
+            'resistance_levels': resistance_levels,
+            'current_price': current_price
+        }
+        
+    except Exception as e:
+        print(f"Destek/Direnç hesaplama hatası: {e}")
+        return {
+            'support_levels': [],
+            'resistance_levels': [],
+            'current_price': df['close'].iloc[-1]
+        }
+
+def analyze_multiple_timeframes(symbol, timeframes=['1h', '4h', '1d', '1w']):
+    """Çoklu timeframe analizi"""
+    try:
+        timeframe_results = {}
+        
+        for tf in timeframes:
+            if tf == '1h':
+                limit = 168
+            elif tf == '4h':
+                limit = 168
+            elif tf == '1d':
+                limit = 100
+            else:
+                limit = 52
+            
+            df = get_binance_ohlc(symbol, interval=tf, limit=limit)
+            if df is not None and not df.empty:
+                analysis = perform_single_timeframe_analysis(df)
+                timeframe_results[tf] = analysis
+        
+        return timeframe_results
+    except Exception as e:
+        print(f"Çoklu timeframe analiz hatası: {e}")
+        return {}
+
+def perform_single_timeframe_analysis(df):
+    """Tek timeframe için basit analiz"""
+    try:
+        current_price = df['close'].iloc[-1]
+        rsi = calculate_rsi(df['close']).iloc[-1]
+        sma_20 = df['close'].rolling(20).mean().iloc[-1]
+        
+        trend = 'BULLISH' if current_price > sma_20 else 'BEARISH'
+        score = 7 if trend == 'BULLISH' and rsi < 70 else 3 if trend == 'BEARISH' and rsi > 30 else 5
+        
+        return {
+            'price': current_price,
+            'rsi': rsi,
+            'trend': trend,
+            'overall_score': score
         }
     except:
-        return {'score': 0, 'reasons': [], 'probability': 0, 'target': 0, 'risk_reward': 0}
+        return {'price': 0, 'rsi': 50, 'trend': 'NEUTRAL', 'overall_score': 5}
 
-def format_advanced_breakout_message(results):
-    """Gelişmiş breakout mesajını formatla"""
+def generate_comprehensive_signals(symbol):
+    """Basit sinyal analizi"""
     try:
-        mesaj = f"🔥 **Gelişmiş Breakout Analizi**\n\n"
-        
-        for i, result in enumerate(results, 1):
-            score_emoji = "🚀" if result['score'] >= 8.5 else "⚡" if result['score'] >= 7 else "🎯"
-            
-            mesaj += f"**{i}. {result['coin']}** {score_emoji}\n"
-            mesaj += f"   📊 Skor: {result['score']}/10\n"
-            mesaj += f"   🎯 Hedef: +%{result['target']}\n"
-            mesaj += f"   📈 Olasılık: %{result['probability']}\n"
-            mesaj += f"   ⚖️ R/R: {result['risk_reward']}\n"
-            mesaj += f"   🔥 Sebepler: {', '.join(result['reasons'])}\n\n"
-        
-        mesaj += f"💡 **En yüksek skor:** {results[0]['coin']} ({results[0]['score']}/10)\n"
-        mesaj += f"🎯 **Detay analiz:** /analiz {results[0]['coin'].lower()}\n"
-        mesaj += f"⏰ **Alarm kur:** /alarm {results[0]['coin'].lower()}"
-        
-        return mesaj
-    except:
-        return "❌ Breakout mesajı formatlanamadı!"
-
-def get_fear_greed_index():
-    """Fear & Greed Index al"""
-    try:
-        url = "https://api.alternative.me/fng/?limit=7&format=json"
-        response = requests.get(url, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            return data['data']
-    except:
-        pass
-    return None
-
-def analyze_fng_btc_correlation():
-    """Fear & Greed ile BTC korelasyonu"""
-    try:
-        # Basit korelasyon analizi
-        df = get_binance_ohlc("BTCUSDT", interval="1d", limit=30)
-        if df is None:
+        df = get_binance_ohlc(symbol, interval="1d", limit=30)
+        if df is None or df.empty:
             return None
         
-        btc_returns = df['close'].pct_change().tail(7).mean() * 100
+        rsi = calculate_rsi(df['close']).iloc[-1]
+        signals = []
+        
+        if rsi < 30:
+            signals.append({
+                'type': 'BUY',
+                'indicator': 'RSI',
+                'reason': f'Aşırı satım (RSI: {rsi:.1f})',
+                'strength': 7,
+                'confidence': 'Yüksek'
+            })
+        elif rsi > 70:
+            signals.append({
+                'type': 'SELL',
+                'indicator': 'RSI',
+                'reason': f'Aşırı alım (RSI: {rsi:.1f})',
+                'strength': 7,
+                'confidence': 'Yüksek'
+            })
         
         return {
-            'btc_7d_return': btc_returns,
-            'correlation_strength': 'Güçlü' if abs(btc_returns) > 5 else 'Orta'
+            'symbol': symbol,
+            'signals': signals,
+            'signal_count': len(signals),
+            'bullish_strength': sum(s['strength'] for s in signals if s['type'] == 'BUY'),
+            'bearish_strength': sum(s['strength'] for s in signals if s['type'] == 'SELL')
         }
     except:
         return None
-
-def format_fear_greed_message(fng_data, btc_correlation):
-    """Fear & Greed mesajını formatla"""
-    try:
-        if not fng_data:
-            return "❌ Fear & Greed Index alınamadı!"
-        
-        current = fng_data[0]
-        value = int(current['value'])
-        classification = current['value_classification']
-        
-        # Emoji ve yorum
-        if value >= 75:
-            emoji = "🤑"
-            yorum = "Aşırı açgözlülük! Dikkatli ol!"
-            action = "Kar realizasyonu zamanı olabilir"
-        elif value >= 55:
-            emoji = "😊"
-            yorum = "Açgözlülük hakim!"
-            action = "Pozisyon büyüklüğüne dikkat et"
-        elif value >= 45:
-            emoji = "😐"
-            yorum = "Nötr durum"
-            action = "Bekle ve gözle"
-        elif value >= 25:
-            emoji = "😰"
-            yorum = "Korku var"
-            action = "Kademeli alım fırsatı"
-        else:
-            emoji = "😱"
-            yorum = "Aşırı korku! Fırsat olabilir!"
-            action = "Güçlü alım fırsatı (risk sermayesiyle)"
-        
-        mesaj = f"📊 **Fear & Greed Index** {emoji}\n\n"
-        mesaj += f"**Değer:** {value}/100\n"
-        mesaj += f"**Durum:** {classification}\n"
-        mesaj += f"💭 **Yorum:** {yorum}\n"
-        mesaj += f"💡 **Strateji:** {action}\n\n"
-        
-        # Haftalık trend
-        if len(fng_data) >= 7:
-            week_ago_value = int(fng_data[6]['value'])
-            change = value - week_ago_value
-            trend = "↗️" if change > 0 else "↘️" if change < 0 else "➡️"
-            mesaj += f"📈 **7 günlük değişim:** {trend} {change:+d} puan\n"
-        
-        # BTC korelasyonu
-        if btc_correlation:
-            btc_return = btc_correlation['btc_7d_return']
-            mesaj += f"₿ **BTC 7g performans:** %{btc_return:+.1f}\n"
-        
-        return mesaj
-    except:
-        return "❌ Fear & Greed analizi formatlanamadı!"
 
 def format_signals_message(signals_analysis, coin_input):
     """Sinyal mesajını formatla"""
@@ -1004,9 +1124,8 @@ def format_signals_message(signals_analysis, coin_input):
         bullish_strength = signals_analysis['bullish_strength']
         bearish_strength = signals_analysis['bearish_strength']
         
-        mesaj = f"🎯 **Trading Sinyalleri**\n\n"
+        mesaj = f"🎯 **{coin_input.upper()} - Trading Sinyalleri**\n\n"
         
-        # Genel durum
         if bullish_strength > bearish_strength:
             overall = "🟢 BULLISH"
             strength_diff = bullish_strength - bearish_strength
@@ -1020,53 +1139,47 @@ def format_signals_message(signals_analysis, coin_input):
         mesaj += f"📊 **Genel Durum:** {overall}\n"
         mesaj += f"💪 **Sinyal Gücü:** {strength_diff:.1f}\n\n"
         
-        # En güçlü sinyaller
-        strong_signals = [s for s in signals if s['strength'] >= 6]
-        if strong_signals:
-            mesaj += f"⚡ **Güçlü Sinyaller:**\n"
-            for signal in strong_signals[:4]:
-                confidence_emoji = "🔥" if signal['confidence'] == 'Yüksek' else "⚡" if signal['confidence'] == 'Orta' else "💫"
-                mesaj += f"{confidence_emoji} **{signal['type']}** - {signal['indicator']}\n"
+        if signals:
+            mesaj += f"⚡ **Aktif Sinyaller:**\n"
+            for signal in signals[:3]:
+                mesaj += f"• **{signal['type']}** - {signal['indicator']}\n"
                 mesaj += f"   📝 {signal['reason']}\n"
-                mesaj += f"   💪 Güç: {signal['strength']}/10\n"
-                if 'timeframe' in signal:
-                    mesaj += f"   ⏰ TF: {signal['timeframe']}\n"
-                mesaj += "\n"
-        
-        # Özet öneri
-        if strength_diff >= 10:
-            recommendation = "🚀 Güçlü pozisyon al"
-        elif strength_diff >= 5:
-            recommendation = "📈 Pozisyon al"
-        elif strength_diff >= -5:
-            recommendation = "⚖️ Bekle"
-        elif strength_diff >= -10:
-            recommendation = "📉 Pozisyon azalt"
+                mesaj += f"   💪 Güç: {signal.get('strength', 0):.0f}/10\n\n"
         else:
-            recommendation = "🔻 Pozisyondan çık"
+            mesaj += f"📊 Şu anda güçlü sinyal yok\n\n"
         
-        mesaj += f"💡 **Öneri:** {recommendation}\n\n"
-        mesaj += f"📊 **Detay analiz:** /analiz {coin_input}\n"
-        mesaj += f"⏰ **Alarm kur:** /alarm {coin_input}"
+        mesaj += f"⚠️ *Yatırım tavsiyesi değildir!*"
         
         return mesaj
     except:
         return "❌ Sinyal mesajı formatlanamadı!"
 
-def find_strongest_timeframe(timeframe_results):
-    """En güçlü timeframe'i bul"""
+def generate_ai_prediction(symbol, coin_input, days):
+    """AI ile fiyat tahmini"""
     try:
-        strongest = None
-        max_score = 0
+        if not OPENAI_API_KEY or OPENAI_API_KEY == "BURAYA_OPENAI_KEYINI_YAZ":
+            return "🤖 **AI tahmini için OpenAI API key gerekli!**\n\nconfig.py'de OPENAI_API_KEY'i ayarlayın."
         
-        for tf, result in timeframe_results.items():
-            score = result.get('overall_score', 0)
-            if score > max_score:
-                max_score = score
-                strongest = {'timeframe': tf, 'score': score}
+        df = get_binance_ohlc(symbol, interval="1d", limit=30)
+        if df is None or df.empty:
+            return None
         
-        return strongest
-    except:
-        return None
+        current_price = df['close'].iloc[-1]
+        rsi = calculate_rsi(df['close']).iloc[-1]
+        
+        prompt = f"{symbol} için {days} günlük fiyat tahmini yap. Güncel fiyat: ${current_price:.4f}, RSI: {rsi:.1f}. Kısa ve net tahmin ver (max 200 kelime)."
+        
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=250
+        )
+        
+        return f"🤖 **{symbol} - {days} Günlük AI Tahmini**\n\n{response.choices[0].message.content}\n\n⚠️ *Yatırım tavsiyesi değildir!*"
+        
+    except Exception as e:
+        print(f"AI tahmin hatası: {e}")
+        return f"❌ AI tahmini oluşturulamadı!"
 
-print("📈 Advanced analysis commands yüklendi!")
+print("🎯 Simplified analysis commands yüklendi!")
