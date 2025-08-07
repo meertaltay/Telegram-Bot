@@ -647,3 +647,32 @@ def create_simple_price_chart(symbol, price_data):
 
 if DEBUG_MODE:
     print("📊 Advanced chart generator utils yüklendi!")
+# utils/chart_generator.py dosyasının sonuna eklenecek kodlar
+
+def find_support_levels(df, current_price, window=5):
+    """Destek seviyelerini bul"""
+    try:
+        lows = []
+        for i in range(window, len(df) - window):
+            if all(df['low'].iloc[i] <= df['low'].iloc[i-j] for j in range(1, window+1)) and \
+               all(df['low'].iloc[i] <= df['low'].iloc[i+j] for j in range(1, window+1)):
+                if df['low'].iloc[i] < current_price:
+                    lows.append(df['low'].iloc[i])
+        
+        return sorted(lows, reverse=True)[:3]
+    except:
+        return []
+
+def find_resistance_levels(df, current_price, window=5):
+    """Direnç seviyelerini bul"""
+    try:
+        highs = []
+        for i in range(window, len(df) - window):
+            if all(df['high'].iloc[i] >= df['high'].iloc[i-j] for j in range(1, window+1)) and \
+               all(df['high'].iloc[i] >= df['high'].iloc[i+j] for j in range(1, window+1)):
+                if df['high'].iloc[i] > current_price:
+                    highs.append(df['high'].iloc[i])
+        
+        return sorted(highs)[:3]
+    except:
+        return []
