@@ -55,19 +55,23 @@ POPULAR_COINS = {
 }
 
 # =============================================================================
-# MESAJ SABITLERI
+# MESAJ SABITLERI - SADELEŞTİRİLMİŞ
 # =============================================================================
 WELCOME_MESSAGE = """
 🚀 **Kripto Bot'a Hoş Geldin!**
 
-💎 **Popüler Komutlar:**
-- /fiyat btc - Bitcoin fiyatı
-- /top10 - En büyük 10 coin
-- /analiz eth - Ethereum analizi
-- /alarm btc - Fiyat alarmı kur
-- /alarmlist - Aktif alarmlarım
+💎 **Ana Komutlar:**
+📊 /fiyat btc - Bitcoin fiyatı
+📈 /analiz eth - Ethereum analizi  
+💧 /likidite sol - Solana likidite haritası
+⏰ /alarm doge - Dogecoin alarmı
 
-🔥 **Hangi analizi merak ediyorsun?**
+🔥 **Hızlı Başlangıç:**
+- /top10 - En büyük coinler
+- /trending - Trend coinler
+- /korku - Piyasa korkusu
+
+📋 Tüm komutlar için: /yardim
 """
 
 ERROR_MESSAGES = {
