@@ -1,11 +1,19 @@
 """
 Alarm Commands - Fiyat alarm sistemi
-/alarm, /alarmlist, /alarmstop komutları
+/alarm, /alarmlist, /alarmstop komutları - HABER SİSTEMİ ENTEGRELİ
 """
 
 import requests
 import telebot
 from config import *
+
+# 🔥 HABER SİSTEMİ İMPORT
+try:
+    from utils.news_system import add_active_user
+except ImportError:
+    print("⚠️ Haber sistemi import edilemedi")
+    def add_active_user(user_id):
+        pass  # Boş fonksiyon - hata vermemesi için
 
 # Global alarm değişkenleri
 price_alarms = {}  # {user_id: [{'coin': 'eth', 'target_price': 3500, 'coin_id': 'ethereum'}]}
@@ -20,6 +28,9 @@ def register_alarm_commands(bot):
         user_id = message.from_user.id
         
         try:
+            # 🔥 HABER SİSTEMİ: Kullanıcıyı otomatik kaydet
+            add_active_user(user_id)
+            
             parts = message.text.strip().split()
             if len(parts) < 2:
                 bot.send_message(message.chat.id, 
@@ -86,6 +97,10 @@ def register_alarm_commands(bot):
     def alarm_listesi(message):
         """Aktif alarmları listele"""
         user_id = message.from_user.id
+        
+        # 🔥 HABER SİSTEMİ: Kullanıcıyı otomatik kaydet
+        add_active_user(user_id)
+        
         user_alarms = get_user_alarms(user_id)
         
         if not user_alarms:
@@ -142,6 +157,9 @@ def register_alarm_commands(bot):
         user_id = message.from_user.id
         
         try:
+            # 🔥 HABER SİSTEMİ: Kullanıcıyı otomatik kaydet
+            add_active_user(user_id)
+            
             parts = message.text.strip().split()
             if len(parts) < 2:
                 bot.send_message(message.chat.id, 
@@ -196,6 +214,10 @@ def register_alarm_commands(bot):
     def cancel_alarm(message):
         """Alarm kurulumunu iptal et"""
         user_id = message.from_user.id
+        
+        # 🔥 HABER SİSTEMİ: Kullanıcıyı otomatik kaydet
+        add_active_user(user_id)
+        
         if user_id in user_states:
             del user_states[user_id]
             bot.send_message(message.chat.id, "❌ **Alarm kurulum iptal edildi!**")
@@ -208,6 +230,9 @@ def register_alarm_commands(bot):
         """Kullanıcının girdiği fiyatı işle"""
         user_id = message.from_user.id
         user_state = user_states[user_id]
+        
+        # 🔥 HABER SİSTEMİ: Kullanıcıyı otomatik kaydet
+        add_active_user(user_id)
         
         try:
             # Fiyatı parse et
@@ -282,6 +307,9 @@ def register_alarm_commands(bot):
         user_id = message.from_user.id
         user_state = user_states[user_id]
         text = message.text.lower().strip()
+        
+        # 🔥 HABER SİSTEMİ: Kullanıcıyı otomatik kaydet
+        add_active_user(user_id)
         
         if text in ['evet', 'yes', 'y', 'e', 'tamam', 'ok']:
             # Alarmı kaydet
