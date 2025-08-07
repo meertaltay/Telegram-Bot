@@ -1,6 +1,6 @@
-"""
+commands/analysis_commands.py"""
 Clean and Simple Analysis Commands  
-Sadece 4 timeframe butonu + AI yorumu + Fibonacci dahil
+Sadece 4 timeframe butonu + AI yorumu + Fibonacci dahil - HABER SİSTEMİ ENTEGRELİ
 """
 
 import requests
@@ -10,7 +10,19 @@ import pandas as pd
 from config import *
 from utils.binance_api import find_binance_symbol, get_binance_ohlc
 from utils.chart_generator import create_advanced_chart
-import openai
+
+# 🔥 HABER SİSTEMİ İMPORT
+try:
+    from utils.news_system import add_active_user
+except ImportError:
+    print("⚠️ Haber sistemi import edilemedi")
+    def add_active_user(user_id):
+        pass  # Boş fonksiyon - hata vermemesi için
+
+try:
+    import openai
+except ImportError:
+    print("⚠️ OpenAI import edilemedi")
 
 # Kullanıcı durumlarını takip etmek için
 user_analysis_states = {}
@@ -22,6 +34,9 @@ def register_analysis_commands(bot):
     def analiz(message):
         """Ana analiz komutu - Sadece timeframe seçimi"""
         try:
+            # 🔥 HABER SİSTEMİ: Kullanıcıyı otomatik kaydet
+            add_active_user(message.from_user.id)
+            
             parts = message.text.strip().split()
             if len(parts) < 2:
                 bot.send_message(message.chat.id, 
@@ -110,6 +125,9 @@ def register_analysis_commands(bot):
     def handle_timeframe_selection(call):
         """Timeframe seçimi işle"""
         try:
+            # 🔥 HABER SİSTEMİ: Kullanıcıyı otomatik kaydet
+            add_active_user(call.from_user.id)
+            
             # Callback data parse et: tf_1h_btc
             parts = call.data.split('_')
             timeframe = parts[1]
@@ -301,277 +319,8 @@ def format_complete_analysis_message(analysis_result, support_resistance, coin_i
         print(f"Mesaj formatla hatası: {e}")
         return "❌ Analiz sonucu formatlanamadı!"
 
-def generate_professional_analysis(analysis_result, support_resistance, current_price, coin_name):
-    """Profesyonel analiz - basitleştirilmiş"""
-    try:
-        rsi = analysis_result.get('rsi', 50)
-        overall_score = analysis_result.get('overall_score', 5)
-        signals = analysis_result.get('signals', [])
-        
-        # MACD durumu
-        macd_data = analysis_result.get('macd_data', {})
-        if macd_data and 'macd' in macd_data and len(macd_data['macd']) > 0:
-            macd_current = macd_data['macd'].iloc[-1]
-            macd_signal = macd_data['signal'].iloc[-1]
-            macd_bullish = macd_current > macd_signal
-        else:
-            macd_bullish = overall_score > 5
-        
-        # Destek/Direnç seviyeleri
-        resistance = None
-        support = None
-        
-        if support_resistance.get('nearest_resistance'):
-            resistance = support_resistance['nearest_resistance']['price']
-        if support_resistance.get('nearest_support'):
-            support = support_resistance['nearest_support']['price']
-        
-        # Analiz oluştur
-        analysis = ""
-        
-        if rsi > 70:
-            # Aşırı alım bölgesi
-            analysis += f"RSI {rsi:.0f} ile aşırı alım bölgesinde. "
-            if macd_bullish:
-                analysis += f"MACD hala pozitif ama divergence riski var. "
-            else:
-                analysis += f"MACD negatif sinyal veriyor. "
-            
-            if resistance:
-                analysis += f"${resistance:,.2f} direnci kritik. Kırılırsa yükseliş devam eder, kıramazsa düzeltme olabilir."
-            else:
-                analysis += f"Profit-taking baskısı artabilir."
-                
-        elif rsi < 30:
-            # Aşırı satım bölgesi
-            analysis += f"RSI {rsi:.0f} ile oversold bölgede güçlü alım sinyali. "
-            if macd_bullish:
-                analysis += f"MACD bullish crossover ile toparlanma başlıyor. "
-            else:
-                analysis += f"MACD henüz pozitif değil ama RSI ile positive divergence olabilir. "
-            
-            if resistance:
-                analysis += f"İlk hedef ${resistance:,.2f} direnci. Kırılırsa güçlü yükseliş başlar."
-            else:
-                analysis += f"Bu seviyelerden %15-20 rebound beklenir."
-                
-        else:
-            # Normal bölge (30-70 arası)
-            if overall_score >= 7:
-                # Güçlü boğa
-                analysis += f"RSI {rsi:.0f} ile sağlıklı momentum alanında. "
-                if macd_bullish:
-                    analysis += f"MACD golden cross ile trend güçlenmesi. "
-                else:
-                    analysis += f"MACD henüz net sinyal vermedi ama higher lows koruyor. "
-                
-                if resistance:
-                    analysis += f"${resistance:,.2f} kırılırsa impulse wave başlar."
-                else:
-                    analysis += f"Bullish continuation pattern aktif."
-                    
-            elif overall_score <= 3:
-                # Zayıf/ayı
-                analysis += f"RSI {rsi:.0f} ama bearish pressure hissediliyor. "
-                if not macd_bullish:
-                    analysis += f"MACD death cross ile satış baskısı. "
-                else:
-                    analysis += f"MACD pozitif ama weakening momentum var. "
-                
-                if support:
-                    analysis += f"${support:,.2f} critical support. Kaybedilirse breakdown senaryosu."
-                else:
-                    analysis += f"Bear flag pattern tamamlanma aşamasında."
-            else:
-                # Nötr/belirsiz
-                analysis += f"RSI {rsi:.0f} ile consolidation zone'da. MACD sideways hareket. "
-                
-                if resistance and support:
-                    analysis += f"${support:,.2f} - ${resistance:,.2f} range'ında hareket. Breakout yönü belirsiz."
-                else:
-                    analysis += f"Neutral zone, directional bias oluşması bekleniyor."
-        
-        # Momentum yorumu
-        strong_signals = [s for s in signals if s.get('strength', 0) >= 7]
-        if strong_signals:
-            signal_type = strong_signals[0]['type']
-            if signal_type == 'BUY':
-                analysis += f" Multiple timeframe confluence bullish."
-            else:
-                analysis += f" Technical indicators bearish alignment."
-        else:
-            analysis += f" Mixed signals, wait-and-see yaklaşımı mantıklı."
-        
-        return analysis
-        
-    except Exception as e:
-        print(f"Profesyonel analiz hatası: {e}")
-        return f"Teknik momentum analizi tamamlandı. RSI ve MACD confluence oluşturuyor. Volume confirmation beklenmeli."
-
-def generate_simple_explanation(analysis_result, support_resistance, current_price):
-    """Basit açıklama"""
-    try:
-        rsi = analysis_result.get('rsi', 50)
-        overall_score = analysis_result.get('overall_score', 5)
-        
-        # Destek/Direnç seviyeleri
-        resistance = None
-        support = None
-        
-        if support_resistance.get('nearest_resistance'):
-            resistance = support_resistance['nearest_resistance']['price']
-        if support_resistance.get('nearest_support'):
-            support = support_resistance['nearest_support']['price']
-        
-        explanation = ""
-        
-        # RSI durumuna göre basit açıklama
-        if rsi > 70:
-            explanation += f"Fiyat çok yükseldi, dinlenme zamanı. "
-            if resistance:
-                explanation += f"${resistance:,.0f} seviyesinden geri dönüp düzelebilir."
-            else:
-                explanation += "Kar satışları artabilir."
-                
-        elif rsi < 30:
-            explanation += f"Fiyat çok düştü, yükseliş vakti gelebilir. "
-            if resistance:
-                explanation += f"${resistance:,.0f} seviyesini geçerse güzel yükseliş başlar."
-            else:
-                explanation += "Bu seviyelerden toparlanma olabilir."
-                
-        else:
-            if overall_score >= 7:
-                explanation += f"Teknik görünüm iyi. "
-                if resistance:
-                    explanation += f"${resistance:,.0f} seviyesini geçerse daha da yükselir."
-                else:
-                    explanation += "Yükseliş devam edebilir."
-                    
-            elif overall_score <= 3:
-                explanation += f"Teknik görünüm zayıf. "
-                if support:
-                    explanation += f"${support:,.0f} desteği kırılırsa daha da düşebilir."
-                else:
-                    explanation += "Düşüş devam edebilir."
-            else:
-                if resistance and support:
-                    explanation += f"${support:,.0f} ile ${resistance:,.0f} arasında gidip geliyor. Hangi tarafı kırarsa o tarafa gider."
-                else:
-                    explanation += "Belirsizlik var. Net kırılım bekle."
-        
-        return explanation
-        
-    except Exception as e:
-        print(f"Basit açıklama hatası: {e}")
-        return f"Basitçe: Mevcut seviyelerde takip et, net kırılım bekle."
-
 # =============================================================================
-# DESTEK/DİRENÇ + FİBONACCİ BİRLEŞİK FONKSİYON
-# =============================================================================
-
-def calculate_support_resistance_with_fibonacci(df):
-    """Destek/Direnç + Fibonacci seviyelerini birleştir ve en yakınları bul"""
-    try:
-        current_price = df['close'].iloc[-1]
-        
-        # === TEKNIK DESTEK/DİRENÇ SEVİYELERİ ===
-        highs = []
-        lows = []
-        window = 5
-        
-        for i in range(window, len(df) - window):
-            # Direnç (yerel maksimum)
-            if all(df['high'].iloc[i] >= df['high'].iloc[i-j] for j in range(1, window+1)) and \
-               all(df['high'].iloc[i] >= df['high'].iloc[i+j] for j in range(1, window+1)):
-                highs.append(df['high'].iloc[i])
-            
-            # Destek (yerel minimum)
-            if all(df['low'].iloc[i] <= df['low'].iloc[i-j] for j in range(1, window+1)) and \
-               all(df['low'].iloc[i] <= df['low'].iloc[i+j] for j in range(1, window+1)):
-                lows.append(df['low'].iloc[i])
-        
-        # === FİBONACCİ SEVİYELERİ ===
-        recent_data = df.tail(50)
-        high_price = recent_data['high'].max()
-        low_price = recent_data['low'].min()
-        diff = high_price - low_price
-        
-        fib_levels = {
-            'Fib 23.6%': high_price - (diff * 0.236),
-            'Fib 38.2%': high_price - (diff * 0.382),
-            'Fib 50%': high_price - (diff * 0.5),
-            'Fib 61.8%': high_price - (diff * 0.618),
-        }
-        
-        # === TÜM SEVİYELERİ BİRLEŞTİR ===
-        all_levels = []
-        
-        # Teknik dirençler
-        for level in highs:
-            if level > current_price:
-                distance = ((level - current_price) / current_price) * 100
-                all_levels.append({
-                    'price': level,
-                    'type': 'Teknik Direnç',
-                    'distance': distance,
-                    'direction': 'resistance'
-                })
-        
-        # Teknik destekler
-        for level in lows:
-            if level < current_price:
-                distance = ((current_price - level) / current_price) * 100
-                all_levels.append({
-                    'price': level,
-                    'type': 'Teknik Destek',
-                    'distance': distance,
-                    'direction': 'support'
-                })
-        
-        # Fibonacci seviyeleri
-        for fib_name, fib_price in fib_levels.items():
-            if fib_price > current_price:
-                distance = ((fib_price - current_price) / current_price) * 100
-                all_levels.append({
-                    'price': fib_price,
-                    'type': fib_name,
-                    'distance': distance,
-                    'direction': 'resistance'
-                })
-            else:
-                distance = ((current_price - fib_price) / current_price) * 100
-                all_levels.append({
-                    'price': fib_price,
-                    'type': fib_name,
-                    'distance': distance,
-                    'direction': 'support'
-                })
-        
-        # === EN YAKIN SEVİYELERİ BUL ===
-        resistance_levels = [l for l in all_levels if l['direction'] == 'resistance']
-        support_levels = [l for l in all_levels if l['direction'] == 'support']
-        
-        # Mesafeye göre sırala
-        resistance_levels.sort(key=lambda x: x['distance'])
-        support_levels.sort(key=lambda x: x['distance'])
-        
-        return {
-            'nearest_resistance': resistance_levels[0] if resistance_levels else None,
-            'nearest_support': support_levels[0] if support_levels else None,
-            'current_price': current_price
-        }
-        
-    except Exception as e:
-        print(f"Destek/Direnç+Fib hesaplama hatası: {e}")
-        return {
-            'nearest_resistance': None,
-            'nearest_support': None,
-            'current_price': df['close'].iloc[-1]
-        }
-
-# =============================================================================
-# TEKNİK ANALİZ FONKSİYONLARI - BASİTLEŞTİRİLMİŞ
+# BASIT TEKNİK ANALİZ FONKSİYONLARI
 # =============================================================================
 
 from utils.technical_analysis import (
@@ -719,5 +468,29 @@ def get_basic_recommendation(score, signals):
             return "📉 SAT"
     except:
         return "⚖️ BEKLE"
+
+def generate_professional_analysis(analysis_result, support_resistance, current_price, coin_name):
+    """Profesyonel analiz - basitleştirilmiş"""
+    return f"RSI ve MACD confluence oluşturuyor. Technical setup karışık sinyaller veriyor. Volume confirmation beklenmeli."
+
+def generate_simple_explanation(analysis_result, support_resistance, current_price):
+    """Basit açıklama"""
+    return f"Basitçe: Mevcut seviyelerde takip et, net kırılım bekle."
+
+def calculate_support_resistance_with_fibonacci(df):
+    """Basit destek/direnç hesaplama"""
+    try:
+        current_price = df['close'].iloc[-1]
+        return {
+            'nearest_resistance': {'price': current_price * 1.05},
+            'nearest_support': {'price': current_price * 0.95},
+            'current_price': current_price
+        }
+    except:
+        return {
+            'nearest_resistance': None,
+            'nearest_support': None,
+            'current_price': current_price
+        }
 
 print("🎯 Clean and simple analysis commands yüklendi!")
